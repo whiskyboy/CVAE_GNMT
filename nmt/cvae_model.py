@@ -43,9 +43,6 @@ class CVAEModel(gnmt_model.GNMTModel):
                reverse_target_vocab_table=None,
                scope=None,
                extra_args=None):
-    self.cvae_latent_size = hparams.cvae_latent_size
-    self.bow_latent_size = hparams.bow_latent_size
-    self.full_kl_step = hparams.full_kl_step
     super(CVAEModel, self).__init__(
         hparams=hparams,
         mode=mode,
@@ -72,6 +69,10 @@ class CVAEModel(gnmt_model.GNMTModel):
     utils.print_out("  num_uni_layers = %d" % num_uni_layers)
 
     iterator = self.iterator
+
+    self.cvae_latent_size = hparams.cvae_latent_size
+    self.bow_latent_size = hparams.bow_latent_size
+    self.full_kl_step = hparams.full_kl_step
 
     with tf.variable_scope("src_encoder") as scope:
       source = iterator.source
