@@ -162,7 +162,7 @@ class CVAEModel(gnmt_model.GNMTModel):
       labels = tf.transpose(labels)
     max_time = self.get_max_time(labels)
 
-    bow_init_state = tf.concat(tf.concat(self.decoder_init_state, -1), -1)
+    bow_init_state = self._multi_tensor_concat(self.decoder_init_state)
     bow_fc = tf.contrib.layers.fully_connected(bow_init_state, self.bow_latent_size, activation_fn=tf.tanh)
     bow_logits = tf.contrib.layers.fully_connected(bow_fc, self.tgt_vocab_size)
     tile_bow_logits = tf.tile(tf.expand_dims(bow_logits, 1), [1, max_time, 1])
@@ -179,10 +179,10 @@ class CVAEModel(gnmt_model.GNMTModel):
     return mean_bow_loss
 
   def _compute_kl_loss(self):
-    prior_mu = tf.concat(tf.concat(self.prior_mu, -1), -1)
-    prior_logvar = tf.concat(tf.concat(self.prior_logvar, -1), -1)
-    recog_mu = tf.concat(tf.concat(self.recog_mu, -1), -1)
-    recog_logvar = tf.concat(tf.concat(self.recog_logvar, -1), -1)
+    prior_mu = self._multi_tensor_concat(self.prior_mu)
+    prior_logvar = self._multi_tensor_concat(self.prior_logvar)
+    recog_mu = self._multi_tensor_concat(self.recog_mu)
+    recog_logvar = self._multi_tensor_concat(self.recog_logvar)
     kl_loss = self._gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar)
     mean_kl_loss = tf.reduce_sum(kl_loss) / tf.to_float(self.batch_size)
     kl_weights = tf.minimum(tf.to_float(self.global_step) / self.full_kl_step, 1.0)
@@ -249,3 +249,9 @@ class CVAEModel(gnmt_model.GNMTModel):
                                         tf.exp(prior_logvar)),
                                reduction_indices=-1)
     return kld
+
+  def _multi_tensor_concat(self, ternsor_list):
+    bi_tensor = tf.concat(ternsor_list, -1)
+    cat_tensor = tf.concat([bi_tensor[0], bi_tensor[1]], -1)
+
+    return cat_tensor
