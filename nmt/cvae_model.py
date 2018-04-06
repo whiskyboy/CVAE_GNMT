@@ -93,20 +93,52 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                            num_uni_layers, num_bi_layers,
                                                                            hparams, scope)
 
-    prior_mulogvar = tf.contrib.layers.fully_connected(src_encoder_state, self.cvae_latent_size*2)
-    self.prior_mu, self.prior_logvar = prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
+    _num_encoder_layers = len(src_encoder_state)
+    self.decoder_init_state = []
+    self.prior_mu = []
+    self.prior_logvar = []
+    self.recog_mu = []
+    self.recog_logvar = []
+    for i in range(_num_encoder_layers):
+      self.decoder_init_state[i] = []
+      self.prior_mu[i] = []
+      self.prior_logvar[i] = []
+      self.recog_mu[i] = []
+      self.recog_logvar[i] = []
+      _num_rnn_layers = len(src_encoder_state[i])
+      for j in range(_num_rnn_layers):
+        _src_state = src_encoder_state[i][j]
+        if self.mode != tf.contrib.learn.ModeKeys.INFER:
+          _tgt_state = tgt_encoder_state[i][j]
+        else:
+          _tgt_state = None
+        _init_state, _prior_mu, _prior_logvar, _recog_mu, _recog_logvar = \
+          self._get_decoder_init_state(_src_state, _tgt_state, hparams)
+        self.decoder_init_state[i][j].append(_init_state)
+        self.prior_mu[i][j].append(_prior_mu)
+        self.prior_logvar[i][j].append(_prior_logvar)
+        self.recog_mu[i][j].append(_recog_mu)
+        self.recog_logvar[i][j].append(_recog_logvar)
+
+    return encoder_outputs, self.decoder_init_state
+
+  def _get_decoder_init_state(self, src_state, tgt_state, hparams):
+    prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
+    prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
     latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
 
-    if self.mode != tf.contrib.learn.ModeKeys.INFER:
-      recog_input = tf.concat([src_encoder_state, tgt_encoder_state], -1)
-      recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size*2)
-      self.recog_mu, self.recog_logvar = recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
+    if tgt_state is not None:
+      recog_input = tf.concat([src_state, tgt_state], -1)
+      recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size * 2)
+      recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
       latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
+    else:
+      recog_mu, recog_logvar = None, None
 
-    dec_inputs = tf.concat([src_encoder_state, latent_sample], -1)
-    self.decoder_init_state = decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
+    dec_inputs = tf.concat([src_state, latent_sample], -1)
+    decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
 
-    return encoder_outputs, decoder_init_state
+    return decoder_init_state, prior_mu, prior_logvar, recog_mu, recog_logvar
 
   def _compute_loss(self, logits):
     decoder_loss = super(CVAEModel, self)._compute_loss(logits)
@@ -120,7 +152,8 @@ class CVAEModel(gnmt_model.GNMTModel):
       labels = tf.transpose(labels)
     max_time = self.get_max_time(labels)
 
-    bow_fc = tf.contrib.layers.fully_connected(self.decoder_init_state, self.bow_latent_size, activation_fn=tf.tanh)
+    bow_init_state = tf.concat(tf.concat(self.decoder_init_state, -1), -1)
+    bow_fc = tf.contrib.layers.fully_connected(bow_init_state, self.bow_latent_size, activation_fn=tf.tanh)
     bow_logits = tf.contrib.layers.fully_connected(bow_fc, self.tgt_vocab_size)
     tile_bow_logits = tf.tile(tf.expand_dims(bow_logits, 1), [1, max_time, 1])
     if self.time_major:
@@ -136,7 +169,11 @@ class CVAEModel(gnmt_model.GNMTModel):
     return mean_bow_loss
 
   def _compute_kl_loss(self):
-    kl_loss = self._gaussian_kld(self.recog_mu, self.recog_logvar, self.prior_mu, self.prior_logvar)
+    prior_mu = tf.concat(tf.concat(self.prior_mu, -1), -1)
+    prior_logvar = tf.concat(tf.concat(self.prior_logvar, -1), -1)
+    recog_mu = tf.concat(tf.concat(self.recog_mu, -1), -1)
+    recog_logvar = tf.concat(tf.concat(self.recog_logvar, -1), -1)
+    kl_loss = self._gaussian_kld(recog_mu, recog_logvar, prior_mu, prior_logvar)
     mean_kl_loss = tf.reduce_sum(kl_loss) / tf.to_float(self.batch_size)
     kl_weights = tf.minimum(tf.to_float(self.global_step) / self.full_kl_step, 1.0)
 
