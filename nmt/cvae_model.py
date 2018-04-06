@@ -94,18 +94,18 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                            hparams, scope)
 
     _num_encoder_layers = len(src_encoder_state)
-    self.decoder_init_state = []
-    self.prior_mu = []
-    self.prior_logvar = []
-    self.recog_mu = []
-    self.recog_logvar = []
+    self.decoder_init_state = [0] * _num_encoder_layers
+    self.prior_mu = [0] * _num_encoder_layers
+    self.prior_logvar = [0] * _num_encoder_layers
+    self.recog_mu = [0] * _num_encoder_layers
+    self.recog_logvar = [0] * _num_encoder_layers
     for i in range(_num_encoder_layers):
-      self.decoder_init_state[i] = []
-      self.prior_mu[i] = []
-      self.prior_logvar[i] = []
-      self.recog_mu[i] = []
-      self.recog_logvar[i] = []
       _num_rnn_layers = len(src_encoder_state[i])
+      self.decoder_init_state[i] = [0] * _num_rnn_layers
+      self.prior_mu[i] = [0] * _num_rnn_layers
+      self.prior_logvar[i] = [0] * _num_rnn_layers
+      self.recog_mu[i] = [0] * _num_rnn_layers
+      self.recog_logvar[i] = [0] * _num_rnn_layers
       for j in range(_num_rnn_layers):
         _src_state = src_encoder_state[i][j]
         if self.mode != tf.contrib.learn.ModeKeys.INFER:
