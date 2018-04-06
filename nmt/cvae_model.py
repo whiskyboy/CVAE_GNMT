@@ -43,6 +43,9 @@ class CVAEModel(gnmt_model.GNMTModel):
                reverse_target_vocab_table=None,
                scope=None,
                extra_args=None):
+    self.cvae_latent_size = hparams.cvae_latent_size
+    self.bow_latent_size = hparams.bow_latent_size
+    self.full_kl_step = hparams.full_kl_step
     super(CVAEModel, self).__init__(
         hparams=hparams,
         mode=mode,
@@ -52,9 +55,6 @@ class CVAEModel(gnmt_model.GNMTModel):
         reverse_target_vocab_table=reverse_target_vocab_table,
         scope=scope,
         extra_args=extra_args)
-    self.cvae_latent_size = hparams.cvae_latent_size
-    self.bow_latent_size = hparams.bow_latent_size
-    self.full_kl_step = hparams.full_kl_step
 
   def _build_encoder(self, hparams):
     """Build a CVAE encoder."""
@@ -73,7 +73,7 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     iterator = self.iterator
 
-    with tf.variable_scope("encoder") as scope:
+    with tf.variable_scope("src_encoder") as scope:
       source = iterator.source
       if self.time_major:
         source = tf.transpose(source)
@@ -83,6 +83,7 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                           hparams, scope)
       encoder_outputs = src_encoder_outputs
 
+    with tf.variable_scope("tgt_encoder") as scope:
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
         target = iterator.target
         if self.time_major:
@@ -93,17 +94,17 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                            hparams, scope)
 
     prior_mulogvar = tf.contrib.layers.fully_connected(src_encoder_state, self.cvae_latent_size*2)
-    self.prior_mu, self.prior_logvar = prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=1)
+    self.prior_mu, self.prior_logvar = prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
     latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
 
     if self.mode != tf.contrib.learn.ModeKeys.INFER:
-      recog_input = tf.concat([src_encoder_state, tgt_encoder_state], 1)
+      recog_input = tf.concat([src_encoder_state, tgt_encoder_state], -1)
       recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size*2)
-      self.recog_mu, self.recog_logvar = recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=1)
+      self.recog_mu, self.recog_logvar = recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
       latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
 
-    dec_inputs = tf.concat([src_encoder_state, latent_sample], 1)
-    self.decoder_init_state = decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units, )
+    dec_inputs = tf.concat([src_encoder_state, latent_sample], -1)
+    self.decoder_init_state = decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
 
     return encoder_outputs, decoder_init_state
 
@@ -197,5 +198,7 @@ class CVAEModel(gnmt_model.GNMTModel):
   def _gaussian_kld(self, recog_mu, recog_logvar, prior_mu, prior_logvar):
     kld = -0.5 * tf.reduce_sum(1 + (recog_logvar - prior_logvar)
                                - tf.div(tf.pow(prior_mu - recog_mu, 2), tf.exp(prior_logvar))
-                               - tf.div(tf.exp(recog_logvar), tf.exp(prior_logvar)), reduction_indices=1)
+                               - tf.div(tf.exp(recog_logvar),
+                                        tf.exp(prior_logvar)),
+                               reduction_indices=-1)
     return kld

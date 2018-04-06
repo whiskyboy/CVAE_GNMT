@@ -67,7 +67,7 @@ def add_arguments(parser):
   parser.add_argument("--cvae_model", type="bool", nargs="?", const=True,
                       default=False,
                       help="Whether to use CVAE model.")
-  parser.add_argument("--cvae_latent_szie", type=int, default=32,
+  parser.add_argument("--cvae_latent_size", type=int, default=32,
                       help="Latent variable size for CVAE model.")
   parser.add_argument("--bow_latent_size", type=int, default=400,
                       help="BOW latent variable size for CVAE model.")
