@@ -63,6 +63,17 @@ def add_arguments(parser):
   parser.add_argument("--num_embeddings_partitions", type=int, default=0,
                       help="Number of partitions for embedding vars.")
 
+  # CVAE Model
+  parser.add_argument("--cvae_model", type="bool", nargs="?", const=True,
+                      default=False,
+                      help="Whether to use CVAE model.")
+  parser.add_argument("--cvae_latent_szie", type=int, default=32,
+                      help="Latent variable size for CVAE model.")
+  parser.add_argument("--bow_latent_size", type=int, default=400,
+                      help="BOW latent variable size for CVAE model.")
+  parser.add_argument("--full_kl_step", type=int, default=30000,
+                      help="Decay KL loss weight before full_kl_step for CVAE model")
+
   # attention mechanisms
   parser.add_argument("--attention", type=str, default="", help="""\
       luong | scaled_luong | bahdanau | normed_bahdanau or set to "" for no
@@ -311,6 +322,12 @@ def create_hparams(flags):
       residual=flags.residual,
       time_major=flags.time_major,
       num_embeddings_partitions=flags.num_embeddings_partitions,
+
+      # CVAE
+      cvae_model=flags.cvae_model,
+      cvae_latent_size=flags.cvae_latent_size,
+      bow_latent_size=flags.bow_latent_size,
+      full_kl_step=flags.full_kl_step,
 
       # Attention mechanisms
       attention=flags.attention,

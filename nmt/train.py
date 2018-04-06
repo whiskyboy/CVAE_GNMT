@@ -24,6 +24,7 @@ import tensorflow as tf
 
 from . import attention_model
 from . import gnmt_model
+from . import cvae_model
 from . import inference
 from . import model as nmt_model
 from . import model_helper
@@ -281,17 +282,20 @@ def train(hparams, scope=None, target_session=""):
   if not steps_per_external_eval:
     steps_per_external_eval = 5 * steps_per_eval
 
-  if not hparams.attention:
-    model_creator = nmt_model.Model
-  else:  # Attention
-    if (hparams.encoder_type == "gnmt" or
-        hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
-      model_creator = gnmt_model.GNMTModel
-    elif hparams.attention_architecture == "standard":
-      model_creator = attention_model.AttentionModel
-    else:
-      raise ValueError("Unknown attention architecture %s" %
-                       hparams.attention_architecture)
+  if hparams.cvae_model:
+    model_creator = cvae_model.CVAEModel
+  else:
+    if not hparams.attention:
+      model_creator = nmt_model.Model
+    else:  # Attention
+      if (hparams.encoder_type == "gnmt" or
+          hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+        model_creator = gnmt_model.GNMTModel
+      elif hparams.attention_architecture == "standard":
+        model_creator = attention_model.AttentionModel
+      else:
+        raise ValueError("Unknown attention architecture %s" %
+                         hparams.attention_architecture)
 
   train_model = model_helper.create_train_model(model_creator, hparams, scope)
   eval_model = model_helper.create_eval_model(model_creator, hparams, scope)

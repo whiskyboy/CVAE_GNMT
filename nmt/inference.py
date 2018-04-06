@@ -23,6 +23,7 @@ import tensorflow as tf
 
 from . import attention_model
 from . import gnmt_model
+from . import cvae_model
 from . import model as nmt_model
 from . import model_helper
 from .utils import misc_utils as utils
@@ -91,14 +92,17 @@ def inference(ckpt,
   if hparams.inference_indices:
     assert num_workers == 1
 
-  if not hparams.attention:
-    model_creator = nmt_model.Model
-  elif hparams.attention_architecture == "standard":
-    model_creator = attention_model.AttentionModel
-  elif hparams.attention_architecture in ["gnmt", "gnmt_v2"]:
-    model_creator = gnmt_model.GNMTModel
+  if hparams.cvae_model:
+    model_creator = cvae_model.CVAEModel
   else:
-    raise ValueError("Unknown model architecture")
+    if not hparams.attention:
+      model_creator = nmt_model.Model
+    elif hparams.attention_architecture == "standard":
+      model_creator = attention_model.AttentionModel
+    elif hparams.attention_architecture in ["gnmt", "gnmt_v2"]:
+      model_creator = gnmt_model.GNMTModel
+    else:
+      raise ValueError("Unknown model architecture")
   infer_model = model_helper.create_infer_model(model_creator, hparams, scope)
 
   if num_workers == 1:
