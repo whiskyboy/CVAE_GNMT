@@ -105,6 +105,8 @@ class BaseModel(object):
         self.output_layer = layers_core.Dense(
             hparams.tgt_vocab_size, use_bias=False, name="output_projection")
 
+    self.global_step = tf.Variable(0, trainable=False)
+
     ## Train graph
     res = self.build_graph(hparams, scope=scope)
 
@@ -125,7 +127,6 @@ class BaseModel(object):
       self.predict_count = tf.reduce_sum(
           self.iterator.target_sequence_length)
 
-    self.global_step = tf.Variable(0, trainable=False)
     params = tf.trainable_variables()
 
     # Gradients and SGD update operation for training the model.
