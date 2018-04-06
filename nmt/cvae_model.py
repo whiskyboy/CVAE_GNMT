@@ -114,11 +114,11 @@ class CVAEModel(gnmt_model.GNMTModel):
           _tgt_state = None
         _init_state, _prior_mu, _prior_logvar, _recog_mu, _recog_logvar = \
           self._get_decoder_init_state(_src_state, _tgt_state, hparams)
-        self.decoder_init_state[i][j].append(_init_state)
-        self.prior_mu[i][j].append(_prior_mu)
-        self.prior_logvar[i][j].append(_prior_logvar)
-        self.recog_mu[i][j].append(_recog_mu)
-        self.recog_logvar[i][j].append(_recog_logvar)
+        self.decoder_init_state[i][j] = _init_state
+        self.prior_mu[i][j] = _prior_mu
+        self.prior_logvar[i][j] = _prior_logvar
+        self.recog_mu[i][j] = _recog_mu
+        self.recog_logvar[i][j] = _recog_logvar
 
     return encoder_outputs, self.decoder_init_state
 
