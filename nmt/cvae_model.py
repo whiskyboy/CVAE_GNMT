@@ -119,6 +119,16 @@ class CVAEModel(gnmt_model.GNMTModel):
         self.prior_logvar[i][j] = _prior_logvar
         self.recog_mu[i][j] = _recog_mu
         self.recog_logvar[i][j] = _recog_logvar
+      self.decoder_init_state[i] = tf.contrib.rnn.LSTMStateTuple(*self.decoder_init_state[i])
+      self.prior_mu[i] = tf.contrib.rnn.LSTMStateTuple(*self.prior_mu[i])
+      self.prior_logvar[i] = tf.contrib.rnn.LSTMStateTuple(*self.prior_logvar[i])
+      self.recog_mu[i] = tf.contrib.rnn.LSTMStateTuple(*self.recog_mu[i])
+      self.recog_logvar[i] = tf.contrib.rnn.LSTMStateTuple(*self.recog_logvar[i])
+    self.decoder_init_state = tuple(self.decoder_init_state)
+    self.prior_mu = tuple(self.prior_mu)
+    self.prior_logvar = tuple(self.prior_logvar)
+    self.recog_mu = tuple(self.recog_mu)
+    self.recog_logvar = tuple(self.recog_logvar)
 
     return encoder_outputs, self.decoder_init_state
 
