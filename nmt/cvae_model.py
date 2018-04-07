@@ -166,12 +166,14 @@ class CVAEModel(gnmt_model.GNMTModel):
       labels = tf.transpose(labels)
     max_time = self.get_max_time(labels)
 
-    bow_init_state = self._multi_tensor_concat(self.decoder_init_state)
-    bow_fc = tf.contrib.layers.fully_connected(bow_init_state, self.bow_latent_size, activation_fn=tf.tanh)
-    bow_logits = tf.contrib.layers.fully_connected(bow_fc, self.tgt_vocab_size)
-    tile_bow_logits = tf.tile(tf.expand_dims(bow_logits, 1), [1, max_time, 1])
-    if self.time_major:
-      tile_bow_logits = tf.transpose(tile_bow_logits)
+    with tf.variable_scope("bow_decoder") as scope:
+      bow_init_state = self._multi_tensor_concat(self.decoder_init_state)
+      bow_fc = tf.contrib.layers.fully_connected(bow_init_state, self.bow_latent_size, activation_fn=tf.tanh)
+      bow_logits = tf.contrib.layers.fully_connected(bow_fc, self.tgt_vocab_size)
+      if self.time_major:
+        tile_bow_logits = tf.tile(tf.expand_dims(bow_logits, 0), [max_time, 1, 1])
+      else:
+        tile_bow_logits = tf.tile(tf.expand_dims(bow_logits, 1), [1, max_time, 1])
 
     label_mask = tf.sequence_mask(self.iterator.target_sequence_length - 1, max_time, dtype=tile_bow_logits.dtype)
     if self.time_major:
