@@ -114,7 +114,7 @@ class CVAEModel(gnmt_model.GNMTModel):
         else:
           _tgt_state = None
         _init_state, _prior_mu, _prior_logvar, _recog_mu, _recog_logvar = \
-          self._get_decoder_init_state(_src_state, _tgt_state, hparams)
+          self._get_decoder_init_state(_src_state, _tgt_state, "%s_%s"%(i,j), hparams)
         self.decoder_init_state[i][j] = _init_state
         self.prior_mu[i][j] = _prior_mu
         self.prior_logvar[i][j] = _prior_logvar
@@ -133,21 +133,24 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     return encoder_outputs, self.decoder_init_state
 
-  def _get_decoder_init_state(self, src_state, tgt_state, hparams):
-    prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
-    prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
-    latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
+  def _get_decoder_init_state(self, src_state, tgt_state, scope_idx, hparams):
+    with tf.variable_scope("priorNetwork_%s" % scope_idx) as scope:
+      prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
+      prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
+      latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
 
-    if tgt_state is not None:
-      recog_input = tf.concat([src_state, tgt_state], -1)
-      recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size * 2)
-      recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
-      latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
-    else:
-      recog_mu, recog_logvar = None, None
+    with tf.variable_scope("recogNetwork_%s" % scope_idx) as scope:
+      if tgt_state is not None:
+        recog_input = tf.concat([src_state, tgt_state], -1)
+        recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size * 2)
+        recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
+        latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
+      else:
+        recog_mu, recog_logvar = None, None
 
-    dec_inputs = tf.concat([src_state, latent_sample], -1)
-    decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
+    with tf.variable_scope("generationNetwork_%s" % scope_idx) as scope:
+      dec_inputs = tf.concat([src_state, latent_sample], -1)
+      decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
 
     return decoder_init_state, prior_mu, prior_logvar, recog_mu, recog_logvar
 
