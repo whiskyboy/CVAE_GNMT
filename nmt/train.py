@@ -200,13 +200,18 @@ def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
 def init_stats():
   """Initialize statistics that we want to accumulate."""
   return {"step_time": 0.0, "loss": 0.0, "predict_count": 0.0,
-          "total_count": 0.0, "grad_norm": 0.0}
-
+          "total_count": 0.0, "grad_norm": 0.0,
+          "bow_loss": 0.0, "kl_loss": 0.0}
 
 def update_stats(stats, start_time, step_result):
   """Update stats: write summary and accumulate statistics."""
-  (_, step_loss, step_predict_count, step_summary, global_step,
-   step_word_count, batch_size, grad_norm, learning_rate) = step_result
+  if len(step_result) == 9:
+    (_, step_loss, step_predict_count, step_summary, global_step,
+     step_word_count, batch_size, grad_norm, learning_rate) = step_result
+    bow_loss = kl_loss = 0
+  elif len(step_result) == 11:
+    (_, step_loss, step_predict_count, step_summary, global_step,
+     step_word_count, batch_size, grad_norm, learning_rate, bow_loss, kl_loss) = step_result
 
   # Update statistics
   stats["step_time"] += (time.time() - start_time)
@@ -214,6 +219,8 @@ def update_stats(stats, start_time, step_result):
   stats["predict_count"] += step_predict_count
   stats["total_count"] += float(step_word_count)
   stats["grad_norm"] += grad_norm
+  stats["bow_loss"] += (bow_loss * batch_size)
+  stats["kl_loss"] += (kl_loss * batch_size)
 
   return global_step, learning_rate, step_summary
 
@@ -221,9 +228,10 @@ def update_stats(stats, start_time, step_result):
 def print_step_info(prefix, global_step, info, result_summary, log_f):
   """Print all info at the current global step."""
   utils.print_out(
-      "%sstep %d lr %g step-time %.2fs wps %.2fK ppl %.2f gN %.2f %s, %s" %
+      "%sstep %d lr %g step-time %.2fs wps %.2fK ppl %.2f bow_loss %.2f kl_loss %.2f gN %.2f %s, %s" %
       (prefix, global_step, info["learning_rate"], info["avg_step_time"],
-       info["speed"], info["train_ppl"], info["avg_grad_norm"], result_summary,
+       info["speed"], info["train_ppl"], info["avg_bow_loss"], info["avg_kl_loss"],
+       info["avg_grad_norm"], result_summary,
        time.ctime()),
       log_f)
 
@@ -233,7 +241,9 @@ def process_stats(stats, info, global_step, steps_per_stats, log_f):
   # Update info
   info["avg_step_time"] = stats["step_time"] / steps_per_stats
   info["avg_grad_norm"] = stats["grad_norm"] / steps_per_stats
-  info["train_ppl"] = utils.safe_exp(stats["loss"] / stats["predict_count"])
+  info["train_ppl"] = utils.safe_exp((stats["loss"] - stats["bow_loss"] - stats["kl_loss"]) / stats["predict_count"])
+  info["avg_bow_loss"] = stats["bow_loss"] / steps_per_stats
+  info["avg_kl_loss"] = stats["kl_loss"] / steps_per_stats
   info["speed"] = stats["total_count"] / (1000 * stats["step_time"])
 
   # Check for overflow
@@ -251,7 +261,8 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
                  hparams, log_f):
   """Misc tasks to do before training."""
   stats = init_stats()
-  info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
+  info = {"train_ppl": 0.0, "avg_bow_loss": 0.0, "avg_kl_loss": 0.0,
+          "speed": 0.0, "avg_step_time": 0.0,
           "avg_grad_norm": 0.0,
           "learning_rate": loaded_train_model.learning_rate.eval(
               session=train_sess)}

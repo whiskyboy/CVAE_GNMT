@@ -155,10 +155,10 @@ class CVAEModel(gnmt_model.GNMTModel):
     return decoder_init_state, prior_mu, prior_logvar, recog_mu, recog_logvar
 
   def _compute_loss(self, logits):
-    decoder_loss = super(CVAEModel, self)._compute_loss(logits)
-    bow_loss = self._compute_bow_loss()
-    kl_loss = self._compute_kl_loss()
-    return decoder_loss + bow_loss + kl_loss
+    self.decoder_loss = super(CVAEModel, self)._compute_loss(logits)
+    self.bow_loss = self._compute_bow_loss()
+    self.kl_loss = self._compute_kl_loss()
+    return self.decoder_loss + self.bow_loss + self.kl_loss
 
   def _compute_bow_loss(self):
     labels = self.iterator.target

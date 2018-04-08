@@ -256,6 +256,11 @@ class BaseModel(object):
 
   def train(self, sess):
     assert self.mode == tf.contrib.learn.ModeKeys.TRAIN
+    attach_loss = []
+    if hasattr(self, "bow_loss"):
+      attach_loss.append(self.bow_loss)
+    if hasattr(self, "kl_loss"):
+      attach_loss.append(self.kl_loss)
     return sess.run([self.update,
                      self.train_loss,
                      self.predict_count,
@@ -264,7 +269,7 @@ class BaseModel(object):
                      self.word_count,
                      self.batch_size,
                      self.grad_norm,
-                     self.learning_rate])
+                     self.learning_rate] + attach_loss)
 
   def eval(self, sess):
     assert self.mode == tf.contrib.learn.ModeKeys.EVAL
