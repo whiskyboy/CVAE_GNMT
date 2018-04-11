@@ -159,10 +159,17 @@ class BaseModel(object):
           zip(clipped_grads, params), global_step=self.global_step)
 
       # Summary
+      loss_summary = []
+      if hasattr(self, "decoder_loss"):
+        loss_summary.append(tf.summary.scalar("decoder_loss", self.decoder_loss))
+      elif hasattr(self, "bow_loss"):
+        loss_summary.append(tf.summary.scalar("bow_loss", self.bow_loss))
+      elif hasattr(self, "kl_loss"):
+        loss_summary.append(tf.summary.scalar("kl_loss", self.kl_loss))
       self.train_summary = tf.summary.merge([
           tf.summary.scalar("lr", self.learning_rate),
           tf.summary.scalar("train_loss", self.train_loss),
-      ] + grad_norm_summary)
+      ] + loss_summary + grad_norm_summary)
 
     if self.mode == tf.contrib.learn.ModeKeys.INFER:
       self.infer_summary = self._get_infer_summary(hparams)
@@ -273,9 +280,14 @@ class BaseModel(object):
 
   def eval(self, sess):
     assert self.mode == tf.contrib.learn.ModeKeys.EVAL
+    attach_loss = []
+    if hasattr(self, "bow_loss"):
+      attach_loss.append(self.bow_loss)
+    if hasattr(self, "kl_loss"):
+      attach_loss.append(self.kl_loss)
     return sess.run([self.eval_loss,
                      self.predict_count,
-                     self.batch_size])
+                     self.batch_size] + attach_loss)
 
   def build_graph(self, hparams, scope=None):
     """Subclass must implement this method.

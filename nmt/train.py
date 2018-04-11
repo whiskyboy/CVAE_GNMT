@@ -215,12 +215,12 @@ def update_stats(stats, start_time, step_result):
 
   # Update statistics
   stats["step_time"] += (time.time() - start_time)
-  stats["loss"] += (step_loss * batch_size)
-  stats["predict_count"] += step_predict_count
+  stats["loss"] += (step_loss - bow_loss - kl_loss)
+  stats["predict_count"] += (step_predict_count / batch_size)
   stats["total_count"] += float(step_word_count)
   stats["grad_norm"] += grad_norm
-  stats["bow_loss"] += (bow_loss * batch_size)
-  stats["kl_loss"] += (kl_loss * batch_size)
+  stats["bow_loss"] += bow_loss
+  stats["kl_loss"] += kl_loss
 
   return global_step, learning_rate, step_summary
 
@@ -241,7 +241,7 @@ def process_stats(stats, info, global_step, steps_per_stats, log_f):
   # Update info
   info["avg_step_time"] = stats["step_time"] / steps_per_stats
   info["avg_grad_norm"] = stats["grad_norm"] / steps_per_stats
-  info["train_ppl"] = utils.safe_exp((stats["loss"] - stats["bow_loss"] - stats["kl_loss"]) / stats["predict_count"])
+  info["train_ppl"] = utils.safe_exp(stats["loss"] / stats["predict_count"])
   info["avg_bow_loss"] = stats["bow_loss"] / steps_per_stats
   info["avg_kl_loss"] = stats["kl_loss"] / steps_per_stats
   info["speed"] = stats["total_count"] / (1000 * stats["step_time"])
