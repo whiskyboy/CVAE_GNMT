@@ -162,9 +162,9 @@ class BaseModel(object):
       loss_summary = []
       if hasattr(self, "decoder_loss"):
         loss_summary.append(tf.summary.scalar("decoder_loss", self.decoder_loss))
-      elif hasattr(self, "bow_loss"):
+      if hasattr(self, "bow_loss"):
         loss_summary.append(tf.summary.scalar("bow_loss", self.bow_loss))
-      elif hasattr(self, "kl_loss"):
+      if hasattr(self, "kl_loss"):
         loss_summary.append(tf.summary.scalar("kl_loss", self.kl_loss))
       self.train_summary = tf.summary.merge([
           tf.summary.scalar("lr", self.learning_rate),
