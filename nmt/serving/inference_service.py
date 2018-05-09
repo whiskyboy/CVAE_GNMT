@@ -17,15 +17,21 @@ from ..utils import misc_utils as utils
 utils.check_tensorflow_version()
 
 class AlphaCommentServer(object):
-    def __init__(self, model_dir, args=None):
+    def __init__(self, model_dir, src_vocab_file=None, tgt_vocab_file=None, args=None):
         nmt_parser = argparse.ArgumentParser()
         nmt.add_arguments(nmt_parser)
         FLAGS, _ = nmt_parser.parse_known_args(args)
         default_hparams = nmt.create_hparams(FLAGS)
         self.hparams = nmt.create_or_load_hparams(model_dir, default_hparams, FLAGS.hparams_path, save_hparams=False)
         self.hparams.beam_width = 0 # force use greedy decoder for inference
-        self.hparams.src_vocab_file = os.path.join(model_dir, "vocab.in")
-        self.hparams.tgt_vocab_file = os.path.join(model_dir, "vocab.out")
+        if src_vocab_file:
+            self.hparams.src_vocab_file = src_vocab_file
+        else:
+            self.hparams.src_vocab_file = os.path.join(model_dir, "vocab.in")
+        if tgt_vocab_file:
+            self.hparams.tgt_vocab_file = tgt_vocab_file
+        else:
+            self.hparams.tgt_vocab_file = os.path.join(model_dir, "vocab.out")
         self.ckpt = tf.train.latest_checkpoint(model_dir)
         self.infer_model = model_helper.create_infer_model(cvae_model.CVAEModel, self.hparams)
         self.sess = tf.Session(graph=self.infer_model.graph, config=utils.get_config_proto())
