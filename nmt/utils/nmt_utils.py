@@ -107,3 +107,28 @@ def get_translation(nmt_outputs, sent_id, tgt_eos, subword_option):
     translation = utils.format_text(output)
 
   return translation
+
+
+def get_translation_with_score(nmt_outputs, nmt_logp, sent_id, tgt_eos, subword_option):
+  """Given batch decoding outputs, select a sentence and turn to text."""
+  if tgt_eos: tgt_eos = tgt_eos.encode("utf-8")
+  # Select a sentence
+  output = nmt_outputs[sent_id, :].tolist()
+  logp = nmt_logp[sent_id, :]
+
+  # If there is an eos symbol in outputs, cut them at that point.
+  if tgt_eos and tgt_eos in output:
+    eos_idx = output.index(tgt_eos)
+    output = output[:eos_idx]
+    logp = logp[:eos_idx]
+
+  if subword_option == "bpe":  # BPE
+    translation = utils.format_bpe_text(output)
+  elif subword_option == "spm":  # SPM
+    translation = utils.format_spm_text(output)
+  else:
+    translation = utils.format_text(output)
+
+  score = np.sum(logp)
+
+  return translation, score

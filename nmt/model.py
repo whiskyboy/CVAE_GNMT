@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import abc
 
+import numpy as np
 import tensorflow as tf
 
 from tensorflow.python.layers import core as layers_core
@@ -559,6 +560,43 @@ class BaseModel(object):
                                   # time, beam_width] shape.
       sample_words = sample_words.transpose([2, 0, 1])
     return sample_words, infer_summary
+
+  def _softmax(self, x):
+    exp_x = np.exp(x - np.max(x, axis=-1)[..., None])
+    return exp_x / np.sum(exp_x, axis=-1)[..., None]
+
+  def _to_one_hot(self, x, class_num):
+    return np.eye(class_num, dtype=np.byte)[x]
+
+  def _get_log_probability_with_sample_id(self, infer_logits, sample_id):
+    softmax_logits = self._softmax(infer_logits)
+    vocab_size = softmax_logits.shape[-1]
+    one_hot_ids = self._to_one_hot(sample_id, vocab_size)
+    return np.sum(-np.log(softmax_logits) * one_hot_ids, axis=-1)
+
+  def decode_with_logp(self, sess):
+    """Decode a batch.
+
+    Args:
+      sess: tensorflow session to use.
+
+    Returns:
+      A tuple consiting of outputs, infer_summary.
+        outputs: of size [batch_size, time]
+    """
+    infer_logits, _, sample_id, sample_words = self.infer(sess)
+    infer_logp = self._get_log_probability_with_sample_id(infer_logits, sample_id)
+
+    # make sure outputs is of shape [batch_size, time] or [beam_width,
+    # batch_size, time] when using beam search.
+    if self.time_major:
+      infer_logp = infer_logp.transpose()
+      sample_words = sample_words.transpose()
+    elif sample_words.ndim == 3:  # beam search output in [batch_size,
+                                  # time, beam_width] shape.
+      infer_logp = infer_logp.transpose([2, 0, 1])
+      sample_words = sample_words.transpose([2, 0, 1])
+    return sample_words, infer_logp
 
 
 class Model(BaseModel):

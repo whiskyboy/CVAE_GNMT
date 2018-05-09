@@ -58,27 +58,30 @@ class AlphaCommentServer(object):
 
         start_time = time.time()
         num_sentences = 0
-        comment_list = []
+        comments = {}
         while True:
             try:
-                nmt_outputs, _ = self.loaded_infer_model.decode(self.sess)
+                nmt_outputs, nmt_logp = self.loaded_infer_model.decode_with_logp(self.sess)
                 if self.hparams.beam_width == 0:
                     nmt_outputs = np.expand_dims(nmt_outputs, 0)
+                    nmt_logp = np.expand_dims(nmt_logp, 0)
 
                 batch_size = nmt_outputs.shape[1]
                 num_sentences += batch_size
 
                 for sent_id in range(batch_size):
-                    translation = nmt_utils.get_translation(
+                    translation, score = nmt_utils.get_translation_with_score(
                         nmt_outputs[0],
+                        nmt_logp[0],
                         sent_id,
                         tgt_eos=self.hparams.eos,
                         subword_option=self.hparams.subword_option)
                     refined_trans = self._refineAndValidateComment(translation)
                     if refined_trans:
-                        comment_list.append(refined_trans)
+                        score = score / len(translation.split())
+                        comments[refined_trans] = score
             except tf.errors.OutOfRangeError:
                 utils.print_time(
-                    "  done, num of outputs %d" % len(comment_list), start_time)
+                    "  done, num of outputs %d" % len(comments), start_time)
                 break
-        return comment_list
+        return sorted(comments.items(), key=lambda x: x[1])
