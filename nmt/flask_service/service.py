@@ -4,6 +4,8 @@ import jieba
 import argparse
 from ..serving.inference_service import AlphaCommentServer
 
+app = Flask(__name__)
+
 def add_arguments(parser):
     parser.add_argument("--model_dir", type=str, required=True,
                         help="path of model for comment generation")
@@ -57,8 +59,6 @@ def GetComment():
 
 
 if __name__ == "__main__":
-    app = Flask(__name__)
-
     app_parser = argparse.ArgumentParser()
     add_arguments(app_parser)
     FLAGS, _ = app_parser.parse_known_args()
