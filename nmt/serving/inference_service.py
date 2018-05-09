@@ -2,9 +2,9 @@
 from __future__ import print_function
 
 import os
-import sys
 import time
 import argparse
+from itertools import groupby
 import numpy as np
 import tensorflow as tf
 
@@ -32,6 +32,14 @@ class AlphaCommentServer(object):
         with self.infer_model.graph.as_default():
             self.loaded_infer_model = model_helper.load_model(
                 self.infer_model.model, self.ckpt, self.sess, "infer")
+
+    def _refineAndValidateComment(self, comment):
+        tokens = comment.split()
+        refined_tokens = [k for k, g in groupby(tokens)]  # remove consecutive duplicated tokens
+        if len(refined_tokens) != len(set(refined_tokens)):  # still has non-consecutive duplicated tokens
+            return None
+        return " ".join(refined_tokens)
+
 
     def comment(self, title, sample_num=50, batch_size=50):
         if batch_size > sample_num:
@@ -66,10 +74,11 @@ class AlphaCommentServer(object):
                         sent_id,
                         tgt_eos=self.hparams.eos,
                         subword_option=self.hparams.subword_option)
-                    if len(translation.split()) == len(set(translation.split())):
-                        comment_list.append(translation)
+                    refined_trans = self._refineAndValidateComment(translation)
+                    if refined_trans:
+                        comment_list.append(refined_trans)
             except tf.errors.OutOfRangeError:
                 utils.print_time(
-                    "  done, num of outputs %d" % num_sentences, start_time)
+                    "  done, num of outputs %d" % len(comment_list), start_time)
                 break
         return comment_list
