@@ -37,24 +37,25 @@ def pack_response(title, comments):
     comment_list = []
     for comment, score in comments:
         comment_list.append({
-            "comment": comment,
-            "score": score
+            "Comment": comment,
+            "Score": score
         })
     return {
         "Title": title,
-        "Response": comment_list
+        "CommentList": comment_list
     }
 
 
 @app.route("/AlphaComment", methods=['POST'])
 def GetComment():
     req_json = request.get_json()
-    if req_json is None or "title" not in req_json:
+    if req_json is None or "Title" not in req_json:
         return jsonify({"Error": "Bad Request"}), 403
-    title = preprocess_text(req_json["title"])
-    sample_num = req_json.get("sample_num", 50)
-    batch_size = req_json.get("batch_size", 50)
-    comments = comment_server.comment(title, sample_num, batch_size)
+    title = preprocess_text(req_json["Title"])
+    sample_num = req_json.get("SampleNum", 30)
+    batch_size = req_json.get("BatchSize", 30)
+    lm_score = req_json.get("LMScore", False)
+    comments = comment_server.comment(title, sample_num, batch_size, lm_score)
     return jsonify(pack_response(title, comments))
 
 

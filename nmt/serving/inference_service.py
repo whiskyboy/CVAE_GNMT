@@ -47,7 +47,7 @@ class AlphaCommentServer(object):
         return " ".join(refined_tokens)
 
 
-    def comment(self, title, sample_num=50, batch_size=50):
+    def comment(self, title, sample_num=30, batch_size=30, lm_score=False):
         if batch_size > sample_num:
             batch_size = sample_num
 
@@ -63,31 +63,35 @@ class AlphaCommentServer(object):
         utils.print_out("# Start decoding with title: %s" % title)
 
         start_time = time.time()
-        num_sentences = 0
         comments = {}
         while True:
             try:
-                nmt_outputs, nmt_logp = self.loaded_infer_model.decode_with_logp(self.sess)
-                if self.hparams.beam_width == 0:
-                    nmt_outputs = np.expand_dims(nmt_outputs, 0)
-                    nmt_logp = np.expand_dims(nmt_logp, 0)
+                if lm_score:
+                    nmt_outputs, nmt_logp = self.loaded_infer_model.decode_with_logp(self.sess)
+                else:
+                    nmt_outputs, _ = self.loaded_infer_model.decode(self.sess)
+                    nmt_logp = None
+                
+                if self.hparams.beam_width > 0:
+                    nmt_outputs = nmt_outputs[0]
+                    if nmt_logp is not None:
+                        nmt_logp = nmt_logp[0]
 
-                batch_size = nmt_outputs.shape[1]
-                num_sentences += batch_size
-
+                batch_size = nmt_outputs.shape[0]
                 for sent_id in range(batch_size):
                     translation, score = nmt_utils.get_translation_with_score(
-                        nmt_outputs[0],
-                        nmt_logp[0],
+                        nmt_outputs,
+                        nmt_logp,
                         sent_id,
                         tgt_eos=self.hparams.eos,
                         subword_option=self.hparams.subword_option)
+                    utils.print_out("sample comment: %s lm score: %s"%(translation, score))
                     refined_trans = self._refineAndValidateComment(translation)
                     if refined_trans:
-                        score = score / len(translation.split())
+                        utils.print_out("refined comment: %s"%refined_trans)
                         comments[refined_trans] = score
             except tf.errors.OutOfRangeError:
                 utils.print_time(
-                    "  done, num of outputs %d" % len(comments), start_time)
+                    "  done, num of outputs %d"%len(comments), start_time)
                 break
         return sorted(comments.items(), key=lambda x: x[1])
