@@ -6,6 +6,11 @@ from ..serving.inference_service import AlphaCommentServer
 
 app = Flask(__name__)
 
+# constant
+MIN_COMMENT_LEN = 5
+MAX_COMMENT_LEN = 20
+LM_SCORE_THRESHOLD = 2.0
+
 def add_arguments(parser):
     parser.add_argument("--model_dir", type=str, required=True,
                         help="path of model for comment generation")
@@ -55,7 +60,16 @@ def GetComment():
     sample_num = req_json.get("SampleNum", 30)
     batch_size = req_json.get("BatchSize", 30)
     lm_score = req_json.get("LMScore", False)
+    
     comments = comment_server.comment(title, sample_num, batch_size, lm_score)
+    
+    # filter too long or too short comments
+    comments = filter(lambda x: MIN_COMMENT_LEN <= len(x[0].split(" ")) <= MAX_COMMENT_LEN, comments)
+    
+    if lm_score:
+        # filter lm_score less than threshold
+        comments = filter(lambda x: x[1] < LM_SCORE_THRESHOLD, comments)
+    
     return jsonify(pack_response(title, comments))
 
 

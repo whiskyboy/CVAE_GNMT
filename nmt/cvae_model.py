@@ -136,6 +136,8 @@ class CVAEModel(gnmt_model.GNMTModel):
   def _get_decoder_init_state(self, src_state, tgt_state, scope_idx, hparams):
     with tf.variable_scope("priorNetwork_%s" % scope_idx) as scope:
       prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
+      #prior_fc = tf.contrib.layers.fully_connected(src_state, 100, activation_fn=tf.tanh)
+      #prior_mulogvar = tf.contrib.layers.fully_connected(prior_fc, self.cvae_latent_size * 2)
       prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
       latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
 
@@ -143,6 +145,8 @@ class CVAEModel(gnmt_model.GNMTModel):
       if tgt_state is not None:
         recog_input = tf.concat([src_state, tgt_state], -1)
         recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size * 2)
+        #recog_fc = tf.contrib.layers.fully_connected(recog_input, 100, activation_fn=tf.tanh)
+        #recog_mulogvar = tf.contrib.layers.fully_connected(recog_fc, self.cvae_latent_size * 2)
         recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
         latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
       else:

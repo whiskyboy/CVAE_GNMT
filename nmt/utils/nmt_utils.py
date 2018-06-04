@@ -132,7 +132,7 @@ def get_translation_with_score(nmt_outputs, nmt_logp, sent_id, tgt_eos, subword_
 
   if nmt_logp is not None:
     logp = nmt_logp[sent_id, :]
-    logp = logp[:eos_idx]
+    logp = logp[:eos_idx+1]
     score = float(np.mean(logp))
   else:
     score = 0

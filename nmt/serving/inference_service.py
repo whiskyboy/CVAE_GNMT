@@ -41,6 +41,8 @@ class AlphaCommentServer(object):
 
     def _refineAndValidateComment(self, comment):
         tokens = comment.split()
+        if "<unk>" in tokens:
+            return None
         refined_tokens = [k for k, g in groupby(tokens)]  # remove consecutive duplicated tokens
         if len(refined_tokens) != len(set(refined_tokens)):  # still has non-consecutive duplicated tokens
             return None
