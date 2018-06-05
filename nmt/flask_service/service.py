@@ -14,6 +14,8 @@ LM_SCORE_THRESHOLD = 2.0
 def add_arguments(parser):
     parser.add_argument("--model_dir", type=str, required=True,
                         help="path of model for comment generation")
+    parser.add_argument("--sample_num", type=int, default=80,
+                        help="sample number for generation")
     parser.add_argument("--src_vocab_file", type=str, default=None,
                         help="path of source(title) vocabulary file")
     parser.add_argument("--tgt_vocab_file", type=str, default=None,
@@ -57,11 +59,9 @@ def GetComment():
     if req_json is None or "Title" not in req_json:
         return jsonify({"Error": "Bad Request"}), 403
     title = preprocess_text(req_json["Title"])
-    sample_num = req_json.get("SampleNum", 30)
-    batch_size = req_json.get("BatchSize", 30)
-    lm_score = req_json.get("LMScore", False)
+    lm_score = req_json.get("LMScore", True)
     
-    comments = comment_server.comment(title, sample_num, batch_size, lm_score)
+    comments = comment_server.comment(title, lm_score)
     
     # filter too long or too short comments
     comments = filter(lambda x: MIN_COMMENT_LEN <= len(x[0].split(" ")) <= MAX_COMMENT_LEN, comments)
@@ -84,10 +84,11 @@ if __name__ == "__main__":
         FLAGS.tgt_vocab_file = os.path.join(FLAGS.model_dir, "vocab.out")
 
     comment_server = AlphaCommentServer(model_dir=FLAGS.model_dir,
+                                        sample_num=FLAGS.sample_num,
                                         src_vocab_file=FLAGS.src_vocab_file,
                                         tgt_vocab_file=FLAGS.tgt_vocab_file)
 
     src_vocabs = load_vocab_file(FLAGS.src_vocab_file)
     tgt_vocabs = load_vocab_file(FLAGS.tgt_vocab_file)
 
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=80, threaded=True)

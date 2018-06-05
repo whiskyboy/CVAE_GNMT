@@ -73,6 +73,8 @@ def add_arguments(parser):
                       help="BOW latent variable size for CVAE model.")
   parser.add_argument("--full_kl_step", type=int, default=30000,
                       help="Decay KL loss weight before full_kl_step for CVAE model")
+  parser.add_argument("--sample_num", type=int, default=80,
+                      help="Sample number for inference")
 
   # attention mechanisms
   parser.add_argument("--attention", type=str, default="", help="""\
@@ -328,6 +330,7 @@ def create_hparams(flags):
       cvae_latent_size=flags.cvae_latent_size,
       bow_latent_size=flags.bow_latent_size,
       full_kl_step=flags.full_kl_step,
+      sample_num=flags.sample_num,
 
       # Attention mechanisms
       attention=flags.attention,
