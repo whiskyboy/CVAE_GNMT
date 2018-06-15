@@ -30,7 +30,11 @@ import tensorflow as tf
 
 def check_tensorflow_version():
   min_tf_version = "1.4.0-dev20171024"
-  if tf.__version__ < min_tf_version:
+  v1, v2, v3 = tf.__version__.split(".", 2)
+  min_v1, min_v2, min_v3 = min_tf_version.split(".", 2)
+  if int(v1) < int(min_v1) or \
+     (int(v1) == int(min_v1) and int(v2) < int(min_v2)) or \
+     (int(v1) == int(min_v1) and int(v2) == int(min_v2) and v3 < min_v3):
     raise EnvironmentError("Tensorflow version must >= %s" % min_tf_version)
 
 

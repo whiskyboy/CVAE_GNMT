@@ -580,7 +580,7 @@ class BaseModel(object):
   def _get_log_probability_with_sample_id(self, infer_logits, sample_id):
     softmax_logits = self._softmax(infer_logits)
     logits_idx = tuple(np.indices(sample_id.shape)) + (sample_id.astype("int"), )
-    return -np.log(softmax_logits[logits_idx])
+    return np.log(softmax_logits[logits_idx])
 
   def decode_with_logp(self, sess):
     """Decode a batch.

@@ -6,14 +6,11 @@ from ..serving.inference_service import AlphaCommentServer
 
 app = Flask(__name__)
 
-# constant
-MIN_COMMENT_LEN = 5
-MAX_COMMENT_LEN = 20
-LM_SCORE_THRESHOLD = 2.0
-
 def add_arguments(parser):
-    parser.add_argument("--model_dir", type=str, required=True,
-                        help="path of model for comment generation")
+    parser.add_argument("--cvae_model_dir", type=str, required=True,
+                        help="path of cvae model")
+    parser.add_argument("--lm_model_dir", type=str, required=True,
+                        help="path of language model")
     parser.add_argument("--sample_num", type=int, default=80,
                         help="sample number for generation")
     parser.add_argument("--src_vocab_file", type=str, default=None,
@@ -37,40 +34,43 @@ def reformat_tokens(tokens, vocabs):
             ret_tokens.append(token)
     return ret_tokens
 
-def preprocess_text(title):
-    return " ".join(reformat_tokens(jieba.lcut(title), src_vocabs)).encode("utf8")
+def preprocess_text(query):
+    return " ".join(reformat_tokens(jieba.lcut(query), src_vocabs)).encode("utf8")
 
-def pack_response(title, comments):
-    comment_list = []
-    for comment, score in comments:
-        comment_list.append({
-            "Comment": comment,
+def pack_response(query, responses):
+    response_list = []
+    for response, score in responses:
+        response_list.append({
+            "Response": response,
             "Score": score
         })
     return {
-        "Title": title,
-        "CommentList": comment_list
+        "Query": query,
+        "ResponseList": response_list
     }
 
 
 @app.route("/AlphaComment", methods=['POST'])
 def GetComment():
     req_json = request.get_json()
-    if req_json is None or "Title" not in req_json:
+    if req_json is None or "Query" not in req_json:
         return jsonify({"Error": "Bad Request"}), 403
-    title = preprocess_text(req_json["Title"])
-    lm_score = req_json.get("LMScore", True)
+    query = preprocess_text(req_json["Query"])
+    ppl_cutoff_score = req_json.get("PPLCutoffScore", -3.0)
+    lm_cutoff_score = req_json.get("LMCutoffScore", -5.0)
+    pmi_cutoff_score = req_json.get("PMICutoffScore", 1.0)
+    max_return = req_json.get("MaxReturn", 10)
+    min_response_len = req_json.get("MinResponseLen", 3)
+    max_response_len = req_json.get("MaxResponseLen", 20)
     
-    comments = comment_server.comment(title, lm_score)
+    responses = comment_server.comment(query)
+    responses = filter(lambda x: min_response_len <= len(x[0].split(" ")) <= max_response_len and \
+                                x[1][0] > ppl_cutoff_score and \
+                                x[1][1] > lm_cutoff_score and \
+                                x[1][2] > pmi_cutoff_score, responses)
+    responses = sorted(responses, key=lambda x: x[1][2], reverse=True)[:max_return]
     
-    # filter too long or too short comments
-    comments = filter(lambda x: MIN_COMMENT_LEN <= len(x[0].split(" ")) <= MAX_COMMENT_LEN, comments)
-    
-    if lm_score:
-        # filter lm_score less than threshold
-        comments = filter(lambda x: x[1] < LM_SCORE_THRESHOLD, comments)
-    
-    return jsonify(pack_response(title, comments))
+    return jsonify(pack_response(query, responses))
 
 
 if __name__ == "__main__":
@@ -79,11 +79,12 @@ if __name__ == "__main__":
     FLAGS, _ = app_parser.parse_known_args()
 
     if FLAGS.src_vocab_file is None:
-        FLAGS.src_vocab_file = os.path.join(FLAGS.model_dir, "vocab.in")
+        FLAGS.src_vocab_file = os.path.join(FLAGS.cvae_model_dir, "vocab.in")
     if FLAGS.tgt_vocab_file is None:
-        FLAGS.tgt_vocab_file = os.path.join(FLAGS.model_dir, "vocab.out")
+        FLAGS.tgt_vocab_file = os.path.join(FLAGS.cvae_model_dir, "vocab.out")
 
-    comment_server = AlphaCommentServer(model_dir=FLAGS.model_dir,
+    comment_server = AlphaCommentServer(cvae_model_dir=FLAGS.cvae_model_dir,
+                                        lm_model_dir=FLAGS.lm_model_dir,
                                         sample_num=FLAGS.sample_num,
                                         src_vocab_file=FLAGS.src_vocab_file,
                                         tgt_vocab_file=FLAGS.tgt_vocab_file)
