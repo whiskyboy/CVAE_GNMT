@@ -1,6 +1,7 @@
 import os
 from flask import *
 import jieba
+import json
 import argparse
 from ..serving.inference_service import AlphaCommentServer
 
@@ -53,6 +54,7 @@ def pack_response(query, responses):
 @app.route("/AlphaComment", methods=['POST'])
 def GetComment():
     req_json = request.get_json()
+    print "Query: %s"%json.dumps(req_json)
     if req_json is None or "Query" not in req_json:
         return jsonify({"Error": "Bad Request"}), 403
     query = preprocess_text(req_json["Query"])
@@ -68,7 +70,10 @@ def GetComment():
                                 x[1][0] > ppl_cutoff_score and \
                                 x[1][1] > lm_cutoff_score and \
                                 x[1][2] > pmi_cutoff_score, responses)
-    responses = sorted(responses, key=lambda x: x[1][2], reverse=True)[:max_return]
+    if max_return > 0:
+        responses = sorted(responses, key=lambda x: x[1][2], reverse=True)[:max_return]
+    else:
+        responses = sorted(responses, key=lambda x: x[1][2], reverse=True)
     
     return jsonify(pack_response(query, responses))
 
