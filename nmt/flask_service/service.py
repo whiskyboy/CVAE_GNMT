@@ -83,7 +83,7 @@ def GetComment():
 
         isValid = True
         for p in lm_prob_details:
-            if p <= lm_cutoff_score * 1.2:
+            if p <= lm_cutoff_score * 2:
                 isValid = False
                 break
         if not isValid:
