@@ -87,9 +87,9 @@ class AlphaCommentServer(object):
                         subword_option=self.hparams.subword_option)
                     refined_trans = self.refine(translation)
                     if refined_trans:
-                        lm_prob = self.lm_model.log_probability_sentence(refined_trans)
+                        lm_prob, lm_prob_details = self.lm_model.log_probability_sentence(refined_trans)
                         pmi = np.abs(ppl - lm_prob * PMI_LAMBDA)
-                        comments[refined_trans] = (ppl, lm_prob, pmi)
+                        comments[refined_trans] = (ppl, lm_prob, lm_prob_details, pmi)
                         utils.print_out("sample comment: %s ppl: %s lm_prob: %s pmi: %s"%(refined_trans, ppl, lm_prob, pmi))
             except tf.errors.OutOfRangeError:
                 utils.print_time(

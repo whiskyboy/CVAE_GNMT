@@ -66,14 +66,35 @@ def GetComment():
     max_response_len = req_json.get("MaxResponseLen", 20)
     
     responses = comment_server.comment(query)
-    responses = filter(lambda x: min_response_len <= len(x[0].split(" ")) <= max_response_len and \
-                                x[1][0] > ppl_cutoff_score and \
-                                x[1][1] > lm_cutoff_score and \
-                                x[1][2] > pmi_cutoff_score, responses)
+    valid_responses = []
+    for comment, (ppl, lm_prob, lm_prob_details, pmi) in responses:
+        if len(comment.split(" ")) < min_response_len or \
+           len(comment.split(" ")) > max_response_len:
+            continue
+
+        if ppl <= ppl_cutoff_score:
+            continue
+
+        if lm_prob <= lm_cutoff_score:
+            continue
+
+        if pmi <= pmi_cutoff_score:
+            continue
+
+        isValid = True
+        for p in lm_prob_details:
+            if p <= lm_cutoff_score * 1.2:
+                isValid = False
+                break
+        if not isValid:
+            continue
+
+        valid_responses.append((comment, (ppl, lm_prob, pmi)))
+
     if max_return > 0:
-        responses = sorted(responses, key=lambda x: x[1][2], reverse=True)[:max_return]
+        responses = sorted(valid_responses, key=lambda x: x[1][2], reverse=True)[:max_return]
     else:
-        responses = sorted(responses, key=lambda x: x[1][2], reverse=True)
+        responses = sorted(valid_responses, key=lambda x: x[1][2], reverse=True)
     
     return jsonify(pack_response(query, responses))
 

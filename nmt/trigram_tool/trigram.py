@@ -2,10 +2,10 @@
 
 import os
 import sys
-import math
 import jieba
 import logging
 import cPickle as pickle
+import numpy as np
 
 api_methods = [
     'log_probability_sentence',
@@ -69,12 +69,11 @@ class Trigram:
             log(p(sentence)) / words_num
         """
         word_ids = self.__preproc_sentence(sentence)
-        res = 0.0
+        res = []
         for i in range(len(word_ids)-2):
-            res += self.__log_probability_word_given_two_words(word_ids[i], word_ids[i+1], word_ids[i+2])
-        return res/(len(word_ids)-2)
+            res.append(self.__log_probability_word_given_two_words(word_ids[i], word_ids[i+1], word_ids[i+2]))
+        return np.mean(res), res
 
-        
     def log_probability_whether_sentence_ends(self, sentence):
         """
         Compute the log-probability of the end of a sentence.
@@ -253,7 +252,7 @@ class Trigram:
         #    print err_line
         #assert not 0.0 == res
         if 0.0 == res: res = self.appr_zero
-        return math.log(res)
+        return np.log(res)
 
     def __probability_word_given_word(self, widl, widr):
         ug_key = widl
