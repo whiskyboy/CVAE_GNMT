@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 # If a vocab size is greater than this value, put the embedding on cpu instead
-VOCAB_SIZE_THRESHOLD_CPU = 50000
+VOCAB_SIZE_THRESHOLD_CPU = 120000
 
 
 def get_initializer(init_op, seed=None, init_weight=None):
@@ -69,24 +69,29 @@ def create_train_model(
     extra_args=None):
   """Create train graph, model, and iterator."""
   src_file = "%s.%s" % (hparams.train_prefix, hparams.src)
+  ctx_file = "%s.%s" % (hparams.train_prefix, hparams.ctx)
   tgt_file = "%s.%s" % (hparams.train_prefix, hparams.tgt)
   src_vocab_file = hparams.src_vocab_file
+  ctx_vocab_file = hparams.ctx_vocab_file
   tgt_vocab_file = hparams.tgt_vocab_file
 
   graph = tf.Graph()
 
   with graph.as_default(), tf.container(scope or "train"):
-    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
-        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    src_vocab_table, ctx_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, ctx_vocab_file, tgt_vocab_file, hparams.share_vocab)
 
     src_dataset = tf.data.TextLineDataset(src_file)
+    ctx_dataset = tf.data.TextLineDataset(ctx_file)
     tgt_dataset = tf.data.TextLineDataset(tgt_file)
     skip_count_placeholder = tf.placeholder(shape=(), dtype=tf.int64)
 
     iterator = iterator_utils.get_iterator(
         src_dataset,
+        ctx_dataset,
         tgt_dataset,
         src_vocab_table,
+        ctx_vocab_table,
         tgt_vocab_table,
         batch_size=hparams.batch_size,
         sos=hparams.sos,
@@ -94,6 +99,7 @@ def create_train_model(
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=hparams.src_max_len,
+        ctx_max_len=hparams.ctx_max_len,
         tgt_max_len=hparams.tgt_max_len,
         skip_count=skip_count_placeholder,
         num_shards=num_workers,
@@ -109,6 +115,7 @@ def create_train_model(
           iterator=iterator,
           mode=tf.contrib.learn.ModeKeys.TRAIN,
           source_vocab_table=src_vocab_table,
+          context_vocab_table=ctx_vocab_table,
           target_vocab_table=tgt_vocab_table,
           scope=scope,
           extra_args=extra_args)
@@ -122,7 +129,7 @@ def create_train_model(
 
 class EvalModel(
     collections.namedtuple("EvalModel",
-                           ("graph", "model", "src_file_placeholder",
+                           ("graph", "model", "src_file_placeholder", "ctx_file_placeholder",
                             "tgt_file_placeholder", "iterator"))):
   pass
 
@@ -130,20 +137,25 @@ class EvalModel(
 def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
   """Create train graph, model, src/tgt file holders, and iterator."""
   src_vocab_file = hparams.src_vocab_file
+  ctx_vocab_file = hparams.ctx_vocab_file
   tgt_vocab_file = hparams.tgt_vocab_file
   graph = tf.Graph()
 
   with graph.as_default(), tf.container(scope or "eval"):
-    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
-        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    src_vocab_table, ctx_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, ctx_vocab_file, tgt_vocab_file, hparams.share_vocab)
     src_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
+    ctx_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     tgt_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     src_dataset = tf.data.TextLineDataset(src_file_placeholder)
+    ctx_dataset = tf.data.TextLineDataset(ctx_file_placeholder)
     tgt_dataset = tf.data.TextLineDataset(tgt_file_placeholder)
     iterator = iterator_utils.get_iterator(
         src_dataset,
+        ctx_dataset,
         tgt_dataset,
         src_vocab_table,
+        ctx_vocab_table,
         tgt_vocab_table,
         hparams.batch_size,
         sos=hparams.sos,
@@ -151,12 +163,14 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=hparams.src_max_len_infer,
+        ctx_max_len=hparams.ctx_max_len_infer,
         tgt_max_len=hparams.tgt_max_len_infer)
     model = model_creator(
         hparams,
         iterator=iterator,
         mode=tf.contrib.learn.ModeKeys.EVAL,
         source_vocab_table=src_vocab_table,
+        context_vocab_table=ctx_vocab_table,
         target_vocab_table=tgt_vocab_table,
         scope=scope,
         extra_args=extra_args)
@@ -164,13 +178,14 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
       graph=graph,
       model=model,
       src_file_placeholder=src_file_placeholder,
+      ctx_file_placeholder=ctx_file_placeholder,
       tgt_file_placeholder=tgt_file_placeholder,
       iterator=iterator)
 
 
 class InferModel(
     collections.namedtuple("InferModel",
-                           ("graph", "model", "src_placeholder",
+                           ("graph", "model", "src_placeholder", "ctx_placeholder",
                             "batch_size_placeholder", "iterator"))):
   pass
 
@@ -179,30 +194,38 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
   """Create inference model."""
   graph = tf.Graph()
   src_vocab_file = hparams.src_vocab_file
+  ctx_vocab_file = hparams.ctx_vocab_file
   tgt_vocab_file = hparams.tgt_vocab_file
 
   with graph.as_default(), tf.container(scope or "infer"):
-    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
-        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    src_vocab_table, ctx_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, ctx_vocab_file, tgt_vocab_file, hparams.share_vocab)
     reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
         tgt_vocab_file, default_value=vocab_utils.UNK)
 
     src_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
+    ctx_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
     batch_size_placeholder = tf.placeholder(shape=[], dtype=tf.int64)
 
     src_dataset = tf.data.Dataset.from_tensor_slices(
         src_placeholder)
+    ctx_dataset = tf.data.Dataset.from_tensor_slices(
+        ctx_placeholder)
     iterator = iterator_utils.get_infer_iterator(
         src_dataset,
+        ctx_dataset,
         src_vocab_table,
+        ctx_vocab_table,
         batch_size=batch_size_placeholder,
         eos=hparams.eos,
-        src_max_len=hparams.src_max_len_infer)
+        src_max_len=hparams.src_max_len_infer,
+        ctx_max_len=hparams.ctx_max_len_infer)
     model = model_creator(
         hparams,
         iterator=iterator,
         mode=tf.contrib.learn.ModeKeys.INFER,
         source_vocab_table=src_vocab_table,
+        context_vocab_table=ctx_vocab_table,
         target_vocab_table=tgt_vocab_table,
         reverse_target_vocab_table=reverse_tgt_vocab_table,
         scope=scope,
@@ -211,6 +234,7 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
       graph=graph,
       model=model,
       src_placeholder=src_placeholder,
+      ctx_placeholder=ctx_placeholder,
       batch_size_placeholder=batch_size_placeholder,
       iterator=iterator)
 

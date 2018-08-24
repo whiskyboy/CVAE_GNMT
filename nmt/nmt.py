@@ -147,23 +147,25 @@ def add_arguments(parser):
   # data
   parser.add_argument("--src", type=str, default=None,
                       help="Source suffix, e.g., en.")
+  parser.add_argument("--ctx", type=str, default=None,
+                      help="Context suffix, e.g., body")
   parser.add_argument("--tgt", type=str, default=None,
                       help="Target suffix, e.g., de.")
   parser.add_argument("--train_prefix", type=str, default=None,
-                      help="Train prefix, expect files with src/tgt suffixes.")
+                      help="Train prefix, expect files with src/ctx/tgt suffixes.")
   parser.add_argument("--dev_prefix", type=str, default=None,
-                      help="Dev prefix, expect files with src/tgt suffixes.")
+                      help="Dev prefix, expect files with src/ctx/tgt suffixes.")
   parser.add_argument("--test_prefix", type=str, default=None,
-                      help="Test prefix, expect files with src/tgt suffixes.")
+                      help="Test prefix, expect files with src/ctx/tgt suffixes.")
   parser.add_argument("--out_dir", type=str, default=None,
                       help="Store log/model files.")
 
   # Vocab
   parser.add_argument("--vocab_prefix", type=str, default=None, help="""\
-      Vocab prefix, expect files with src/tgt suffixes.\
+      Vocab prefix, expect files with src/ctx/tgt suffixes.\
       """)
   parser.add_argument("--embed_prefix", type=str, default=None, help="""\
-      Pretrained embedding prefix, expect files with src/tgt suffixes.
+      Pretrained embedding prefix, expect files with src/ctx/tgt suffixes.
       The embedding files should be Glove formated txt files.\
       """)
   parser.add_argument("--sos", type=str, default="<s>",
@@ -185,10 +187,14 @@ def add_arguments(parser):
   # Sequence lengths
   parser.add_argument("--src_max_len", type=int, default=50,
                       help="Max length of src sequences during training.")
+  parser.add_argument("--ctx_max_len", type=int, default=50,
+                      help="Max length of ctx sequences during training.")
   parser.add_argument("--tgt_max_len", type=int, default=50,
                       help="Max length of tgt sequences during training.")
   parser.add_argument("--src_max_len_infer", type=int, default=None,
                       help="Max length of src sequences during inference.")
+  parser.add_argument("--ctx_max_len_infer", type=int, default=None,
+                      help="MAx length of ctx sequences during inference.")
   parser.add_argument("--tgt_max_len_infer", type=int, default=None,
                       help="""\
       Max length of tgt sequences during inference.  Also use to restrict the
@@ -257,6 +263,8 @@ def add_arguments(parser):
                       help="Checkpoint file to load a model for inference.")
   parser.add_argument("--inference_input_file", type=str, default=None,
                       help="Set to the text to decode.")
+  parser.add_argument("--inference_context_file", type=str, default=None,
+                      help="Set to the context to decode")
   parser.add_argument("--inference_list", type=str, default=None,
                       help=("A comma-separated list of sentence indices "
                             "(0-based) to decode."))
@@ -303,6 +311,7 @@ def create_hparams(flags):
   return tf.contrib.training.HParams(
       # Data
       src=flags.src,
+      ctx=flags.ctx,
       tgt=flags.tgt,
       train_prefix=flags.train_prefix,
       dev_prefix=flags.dev_prefix,
@@ -352,10 +361,12 @@ def create_hparams(flags):
       num_buckets=flags.num_buckets,
       max_train=flags.max_train,
       src_max_len=flags.src_max_len,
+      ctx_max_len=flags.ctx_max_len,
       tgt_max_len=flags.tgt_max_len,
 
       # Inference
       src_max_len_infer=flags.src_max_len_infer,
+      ctx_max_len_infer=flags.ctx_max_len_infer,
       tgt_max_len_infer=flags.tgt_max_len_infer,
       infer_batch_size=flags.infer_batch_size,
       beam_width=flags.beam_width,
@@ -434,6 +445,7 @@ def extend_hparams(hparams):
   # Flags
   utils.print_out("# hparams:")
   utils.print_out("  src=%s" % hparams.src)
+  utils.print_out("  ctx=%s" % hparams.ctx)
   utils.print_out("  tgt=%s" % hparams.tgt)
   utils.print_out("  train_prefix=%s" % hparams.train_prefix)
   utils.print_out("  dev_prefix=%s" % hparams.dev_prefix)
@@ -444,6 +456,7 @@ def extend_hparams(hparams):
   # Get vocab file names first
   if hparams.vocab_prefix:
     src_vocab_file = hparams.vocab_prefix + "." + hparams.src
+    ctx_vocab_file = hparams.vocab_prefix + "." + hparams.ctx
     tgt_vocab_file = hparams.vocab_prefix + "." + hparams.tgt
   else:
     raise ValueError("hparams.vocab_prefix must be provided.")
@@ -457,12 +470,22 @@ def extend_hparams(hparams):
       eos=hparams.eos,
       unk=vocab_utils.UNK)
 
-  # Target vocab
   if hparams.share_vocab:
     utils.print_out("  using source vocab for target")
+    ctx_vocab_file = src_vocab_file
+    ctx_vocab_size = src_vocab_size
     tgt_vocab_file = src_vocab_file
     tgt_vocab_size = src_vocab_size
   else:
+    # Context vocab
+    ctx_vocab_size, ctx_vocab_file = vocab_utils.check_vocab(
+        ctx_vocab_file,
+        hparams.out_dir,
+        check_special_token=hparams.check_special_token,
+        sos=hparams.sos,
+        eos=hparams.eos,
+        unk=vocab_utils.UNK)
+    # Target vocab
     tgt_vocab_size, tgt_vocab_file = vocab_utils.check_vocab(
         tgt_vocab_file,
         hparams.out_dir,
@@ -471,19 +494,26 @@ def extend_hparams(hparams):
         eos=hparams.eos,
         unk=vocab_utils.UNK)
   hparams.add_hparam("src_vocab_size", src_vocab_size)
+  hparams.add_hparam("ctx_vocab_size", ctx_vocab_size)
   hparams.add_hparam("tgt_vocab_size", tgt_vocab_size)
   hparams.add_hparam("src_vocab_file", src_vocab_file)
+  hparams.add_hparam("ctx_vocab_file", ctx_vocab_file)
   hparams.add_hparam("tgt_vocab_file", tgt_vocab_file)
 
   # Pretrained Embeddings:
   hparams.add_hparam("src_embed_file", "")
+  hparams.add_hparam("ctx_embed_file", "")
   hparams.add_hparam("tgt_embed_file", "")
   if hparams.embed_prefix:
     src_embed_file = hparams.embed_prefix + "." + hparams.src
+    ctx_embed_file = hparams.embed_prefix + "." + hparams.ctx
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
 
     if tf.gfile.Exists(src_embed_file):
       hparams.src_embed_file = src_embed_file
+
+    if tf.gfile.Exists(ctx_embed_file):
+      hparams.ctx_embed_file = ctx_embed_file
 
     if tf.gfile.Exists(tgt_embed_file):
       hparams.tgt_embed_file = tgt_embed_file
@@ -590,7 +620,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
     ckpt = flags.ckpt
     if not ckpt:
       ckpt = tf.train.latest_checkpoint(out_dir)
-    inference_fn(ckpt, flags.inference_input_file,
+    inference_fn(ckpt, flags.inference_input_file, flags.inference_context_file,
                  trans_file, hparams, num_workers, jobid)
 
     # Evaluation

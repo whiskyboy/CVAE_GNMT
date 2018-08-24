@@ -43,6 +43,7 @@ class BaseModel(object):
                mode,
                iterator,
                source_vocab_table,
+               context_vocab_table,
                target_vocab_table,
                reverse_target_vocab_table=None,
                scope=None,
@@ -65,9 +66,11 @@ class BaseModel(object):
     self.iterator = iterator
     self.mode = mode
     self.src_vocab_table = source_vocab_table
+    self.ctx_vocab_table = context_vocab_table
     self.tgt_vocab_table = target_vocab_table
 
     self.src_vocab_size = hparams.src_vocab_size
+    self.ctx_vocab_size = hparams.ctx_vocab_size
     self.tgt_vocab_size = hparams.tgt_vocab_size
     self.num_gpus = hparams.num_gpus
     self.time_major = hparams.time_major

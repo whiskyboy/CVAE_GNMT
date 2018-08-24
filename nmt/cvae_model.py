@@ -39,6 +39,7 @@ class CVAEModel(gnmt_model.GNMTModel):
                mode,
                iterator,
                source_vocab_table,
+               context_vocab_table,
                target_vocab_table,
                reverse_target_vocab_table=None,
                scope=None,
@@ -48,6 +49,7 @@ class CVAEModel(gnmt_model.GNMTModel):
         mode=mode,
         iterator=iterator,
         source_vocab_table=source_vocab_table,
+        context_vocab_table=context_vocab_table,
         target_vocab_table=target_vocab_table,
         reverse_target_vocab_table=reverse_target_vocab_table,
         scope=scope,
@@ -84,6 +86,10 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                           hparams, scope)
       encoder_outputs = src_encoder_outputs
 
+    with tf.variable_scope("ctx_encoder") as scope:
+      context = iterator.context
+      ctx_encoder_state = self._get_bow_encoder(context, hparams, scope)
+
     with tf.variable_scope("tgt_encoder") as scope:
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
         target = iterator.target
@@ -93,6 +99,9 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                            self.embedding_decoder,
                                                                            num_uni_layers, num_bi_layers,
                                                                            hparams, scope)
+
+    epsilon = tf.random_normal(
+      tf.concat((tf.shape(ctx_encoder_state)[:-1], [self.cvae_latent_size]), 0), name="epsilon")
 
     _num_encoder_layers = len(src_encoder_state)
     self.decoder_init_state = [0] * _num_encoder_layers
@@ -114,7 +123,7 @@ class CVAEModel(gnmt_model.GNMTModel):
         else:
           _tgt_state = None
         _init_state, _prior_mu, _prior_logvar, _recog_mu, _recog_logvar = \
-          self._get_decoder_init_state(_src_state, _tgt_state, "%s_%s"%(i,j), hparams)
+          self._get_decoder_init_state(_src_state, ctx_encoder_state, _tgt_state, epsilon, "%s_%s"%(i,j), hparams)
         self.decoder_init_state[i][j] = _init_state
         self.prior_mu[i][j] = _prior_mu
         self.prior_logvar[i][j] = _prior_logvar
@@ -133,27 +142,28 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     return encoder_outputs, self.decoder_init_state
 
-  def _get_decoder_init_state(self, src_state, tgt_state, scope_idx, hparams):
+  def _get_decoder_init_state(self, src_state, ctx_state, tgt_state, epsilon, scope_idx, hparams):
     with tf.variable_scope("priorNetwork_%s" % scope_idx) as scope:
-      prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
+      prior_input = tf.concat([src_state, ctx_state], -1)
+      prior_mulogvar = tf.contrib.layers.fully_connected(prior_input, self.cvae_latent_size * 2)
       #prior_fc = tf.contrib.layers.fully_connected(src_state, 100, activation_fn=tf.tanh)
       #prior_mulogvar = tf.contrib.layers.fully_connected(prior_fc, self.cvae_latent_size * 2)
       prior_mu, prior_logvar = tf.split(prior_mulogvar, 2, axis=-1)
-      latent_sample = self._sample_gaussian(prior_mu, prior_logvar)
+      latent_sample = self._sample_gaussian(epsilon, prior_mu, prior_logvar)
 
     with tf.variable_scope("recogNetwork_%s" % scope_idx) as scope:
       if tgt_state is not None:
-        recog_input = tf.concat([src_state, tgt_state], -1)
+        recog_input = tf.concat([src_state, ctx_state, tgt_state], -1)
         recog_mulogvar = tf.contrib.layers.fully_connected(recog_input, self.cvae_latent_size * 2)
         #recog_fc = tf.contrib.layers.fully_connected(recog_input, 100, activation_fn=tf.tanh)
         #recog_mulogvar = tf.contrib.layers.fully_connected(recog_fc, self.cvae_latent_size * 2)
         recog_mu, recog_logvar = tf.split(recog_mulogvar, 2, axis=-1)
-        latent_sample = self._sample_gaussian(recog_mu, recog_logvar)
+        latent_sample = self._sample_gaussian(epsilon, recog_mu, recog_logvar)
       else:
         recog_mu, recog_logvar = None, None
 
     with tf.variable_scope("generationNetwork_%s" % scope_idx) as scope:
-      dec_inputs = tf.concat([src_state, latent_sample], -1)
+      dec_inputs = tf.concat([src_state, ctx_state, latent_sample], -1)
       decoder_init_state = tf.contrib.layers.fully_connected(dec_inputs, hparams.num_units)
 
     return decoder_init_state, prior_mu, prior_logvar, recog_mu, recog_logvar
@@ -246,8 +256,13 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     return encoder_outputs, encoder_state
 
-  def _sample_gaussian(self, mu, logvar):
-    epsilon = tf.random_normal(tf.shape(logvar), name="epsilon")
+  def _get_bow_encoder(self, context, hparams, scope):
+    bow_encoder_state = tf.contrib.layers.bow_encoder(context, vocab_size=self.ctx_vocab_size, embed_dim=hparams.num_units)
+    bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
+    bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
+    return bow_encoder_state
+
+  def _sample_gaussian(self, epsilon, mu, logvar):
     std = tf.exp(0.5 * logvar)
     z = mu + tf.multiply(std, epsilon)
     return z

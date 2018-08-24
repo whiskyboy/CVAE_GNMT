@@ -83,6 +83,7 @@ def load_data(inference_input_file, hparams=None):
 
 def inference(ckpt,
               inference_input_file,
+              inference_context_file,
               inference_output_file,
               hparams,
               num_workers=1,
@@ -110,6 +111,7 @@ def inference(ckpt,
         infer_model,
         ckpt,
         inference_input_file,
+        inference_context_file,
         inference_output_file,
         hparams)
   else:
@@ -117,6 +119,7 @@ def inference(ckpt,
         infer_model,
         ckpt,
         inference_input_file,
+        inference_context_file,
         inference_output_file,
         hparams,
         num_workers=num_workers,
@@ -126,6 +129,7 @@ def inference(ckpt,
 def single_worker_inference(infer_model,
                             ckpt,
                             inference_input_file,
+                            inference_context_file,
                             inference_output_file,
                             hparams):
   """Inference with a single worker."""
@@ -133,6 +137,7 @@ def single_worker_inference(infer_model,
 
   # Read data
   infer_data = load_data(inference_input_file, hparams)
+  infer_ctx_data = load_data(inference_context_file, hparams)
 
   with tf.Session(
       graph=infer_model.graph, config=utils.get_config_proto()) as sess:
@@ -142,6 +147,7 @@ def single_worker_inference(infer_model,
         infer_model.iterator.initializer,
         feed_dict={
             infer_model.src_placeholder: infer_data,
+            infer_model.ctx_placeholder: infer_ctx_data,
             infer_model.batch_size_placeholder: hparams.infer_batch_size
         })
     # Decode
@@ -172,6 +178,7 @@ def single_worker_inference(infer_model,
 def multi_worker_inference(infer_model,
                            ckpt,
                            inference_input_file,
+                           inference_context_file,
                            inference_output_file,
                            hparams,
                            num_workers,
@@ -185,6 +192,7 @@ def multi_worker_inference(infer_model,
 
   # Read data
   infer_data = load_data(inference_input_file, hparams)
+  infer_ctx_data = load_data(inference_context_file, hparams)
 
   # Split data to multiple workers
   total_load = len(infer_data)
@@ -192,6 +200,7 @@ def multi_worker_inference(infer_model,
   start_position = jobid * load_per_worker
   end_position = min(start_position + load_per_worker, total_load)
   infer_data = infer_data[start_position:end_position]
+  infer_ctx_data = infer_ctx_data[start_position:end_position]
 
   with tf.Session(
       graph=infer_model.graph, config=utils.get_config_proto()) as sess:
@@ -200,6 +209,7 @@ def multi_worker_inference(infer_model,
     sess.run(infer_model.iterator.initializer,
              {
                  infer_model.src_placeholder: infer_data,
+                 infer_model.ctx_placeholder: infer_ctx_data,
                  infer_model.batch_size_placeholder: hparams.infer_batch_size
              })
     # Decode
