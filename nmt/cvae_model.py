@@ -81,24 +81,25 @@ class CVAEModel(gnmt_model.GNMTModel):
       if self.time_major:
         source = tf.transpose(source)
       src_encoder_outputs, src_encoder_state = self._get_sequence_encoder(source, iterator.source_sequence_length,
-                                                                          self.embedding_encoder,
+                                                                          self.src_embedding,
                                                                           num_uni_layers, num_bi_layers,
                                                                           hparams, scope)
       encoder_outputs = src_encoder_outputs
 
     with tf.variable_scope("ctx_encoder") as scope:
       context = iterator.context
-      ctx_encoder_state = self._get_bow_encoder(context, hparams, scope)
+      # ctx_encoder_state = self._get_bow_encoder(context, hparams, scope)
+      ctx_encoder_state = self._get_cnn_encoder(context, self.ctx_embedding, hparams, scope)
 
     with tf.variable_scope("tgt_encoder") as scope:
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
         target = iterator.target
         if self.time_major:
           target = tf.transpose(target)
-        tgt_encoder_outputs, tgt_encoder_state = self._get_sequence_encoder(target, iterator.target_sequence_length-1,
-                                                                           self.embedding_decoder,
-                                                                           num_uni_layers, num_bi_layers,
-                                                                           hparams, scope)
+        tgt_encoder_outputs, tgt_encoder_state = self._get_sequence_encoder(target, iterator.target_sequence_length - 1,
+                                                                            self.tgt_embedding,
+                                                                            num_uni_layers, num_bi_layers,
+                                                                            hparams, scope)
 
     epsilon = tf.random_normal(
       tf.concat((tf.shape(ctx_encoder_state)[:-1], [self.cvae_latent_size]), 0), name="epsilon")
@@ -261,6 +262,21 @@ class CVAEModel(gnmt_model.GNMTModel):
     bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
     bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
     return bow_encoder_state
+
+  def _get_cnn_encoder(self, context, embedding_table, hparams, scope):
+    encoder_emb_inp = tf.nn.embedding_lookup(embedding_table,
+                                             context)
+    # CNN layer
+    conv = tf.layers.conv1d(encoder_emb_inp, hparams.num_units, 5)
+    #conv = tf.layers.conv1d(conv, hparams.num_units, 3)
+    #conv = tf.layers.conv1d(conv, hparams.num_units, 3)
+    # global max pooling layer
+    max_pool = tf.reduce_max(conv, reduction_indices=[1])
+    # dense layer
+    fc = tf.layers.dense(max_pool, hparams.num_units)
+    fc = tf.nn.relu(fc)
+
+    return fc
 
   def _sample_gaussian(self, epsilon, mu, logvar):
     std = tf.exp(0.5 * logvar)

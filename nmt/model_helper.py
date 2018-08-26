@@ -294,14 +294,18 @@ def _create_or_load_embed(embed_name, vocab_file, embed_file,
 
 def create_emb_for_encoder_and_decoder(share_vocab,
                                        src_vocab_size,
+                                       ctx_vocab_size,
                                        tgt_vocab_size,
                                        src_embed_size,
+                                       ctx_embed_size,
                                        tgt_embed_size,
                                        dtype=tf.float32,
                                        num_partitions=0,
                                        src_vocab_file=None,
+                                       ctx_vocab_file=None,
                                        tgt_vocab_file=None,
                                        src_embed_file=None,
+                                       ctx_embed_file=None,
                                        tgt_embed_file=None,
                                        scope=None):
   """Create embedding matrix for both encoder and decoder.
@@ -337,7 +341,7 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     # jobs.
     partitioner = tf.fixed_size_partitioner(num_partitions)
 
-  if (src_embed_file or tgt_embed_file) and partitioner:
+  if (src_embed_file or ctx_embed_file or tgt_embed_file) and partitioner:
     raise ValueError(
         "Can't set num_partitions > 1 when using pretrained embedding")
 
@@ -345,30 +349,40 @@ def create_emb_for_encoder_and_decoder(share_vocab,
       scope or "embeddings", dtype=dtype, partitioner=partitioner) as scope:
     # Share embedding
     if share_vocab:
-      if src_vocab_size != tgt_vocab_size:
-        raise ValueError("Share embedding but different src/tgt vocab sizes"
+      if src_vocab_size != tgt_vocab_size or \
+          src_vocab_size != ctx_vocab_size or \
+          ctx_vocab_size != tgt_vocab_size:
+        raise ValueError("Share embedding but different src/ctx/tgt vocab sizes"
                          " %d vs. %d" % (src_vocab_size, tgt_vocab_size))
-      assert src_embed_size == tgt_embed_size
-      utils.print_out("# Use the same embedding for source and target")
-      vocab_file = src_vocab_file or tgt_vocab_file
-      embed_file = src_embed_file or tgt_embed_file
+      assert (src_embed_size == tgt_embed_size and
+              src_embed_size == ctx_embed_size and
+              ctx_embed_size == tgt_embed_size)
+      utils.print_out("# Use the same embedding for source, context and target")
+      vocab_file = src_vocab_file or ctx_vocab_file or tgt_vocab_file
+      embed_file = src_embed_file or ctx_embed_file or tgt_embed_file
 
-      embedding_encoder = _create_or_load_embed(
+      src_embedding_encoder = _create_or_load_embed(
           "embedding_share", vocab_file, embed_file,
           src_vocab_size, src_embed_size, dtype)
-      embedding_decoder = embedding_encoder
+      ctx_embedding_encoder = src_embedding_encoder
+      tgt_embedding_decoder = src_embedding_encoder
     else:
-      with tf.variable_scope("encoder", partitioner=partitioner):
-        embedding_encoder = _create_or_load_embed(
-            "embedding_encoder", src_vocab_file, src_embed_file,
+      with tf.variable_scope("src_embedding", partitioner=partitioner):
+        src_embedding_encoder = _create_or_load_embed(
+            "src_embedding", src_vocab_file, src_embed_file,
             src_vocab_size, src_embed_size, dtype)
 
-      with tf.variable_scope("decoder", partitioner=partitioner):
-        embedding_decoder = _create_or_load_embed(
-            "embedding_decoder", tgt_vocab_file, tgt_embed_file,
+      with tf.variable_scope("ctx_embedding", partitioner=partitioner):
+        ctx_embedding_encoder = _create_or_load_embed(
+            "ctx_embedding", ctx_vocab_file, ctx_embed_file,
+            ctx_vocab_size, ctx_embed_size, dtype)
+
+      with tf.variable_scope("tgt_embedding", partitioner=partitioner):
+        tgt_embedding_decoder = _create_or_load_embed(
+            "tgt_embedding", tgt_vocab_file, tgt_embed_file,
             tgt_vocab_size, tgt_embed_size, dtype)
 
-  return embedding_encoder, embedding_decoder
+  return src_embedding_encoder, ctx_embedding_encoder, tgt_embedding_decoder
 
 
 def _single_cell(unit_type, num_units, forget_bias, dropout, mode,

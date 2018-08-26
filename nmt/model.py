@@ -251,17 +251,21 @@ class BaseModel(object):
 
   def init_embeddings(self, hparams, scope):
     """Init embeddings."""
-    self.embedding_encoder, self.embedding_decoder = (
+    self.src_embedding, self.ctx_embedding, self.tgt_embedding = (
         model_helper.create_emb_for_encoder_and_decoder(
             share_vocab=hparams.share_vocab,
             src_vocab_size=self.src_vocab_size,
+            ctx_vocab_size=self.ctx_vocab_size,
             tgt_vocab_size=self.tgt_vocab_size,
             src_embed_size=hparams.num_units,
+            ctx_embed_size=hparams.num_units,
             tgt_embed_size=hparams.num_units,
             num_partitions=hparams.num_embeddings_partitions,
             src_vocab_file=hparams.src_vocab_file,
+            ctx_vocab_file=hparams.ctx_vocab_file,
             tgt_vocab_file=hparams.tgt_vocab_file,
             src_embed_file=hparams.src_embed_file,
+            ctx_embed_file=hparams.ctx_embed_file,
             tgt_embed_file=hparams.tgt_embed_file,
             scope=scope,))
 
@@ -412,7 +416,7 @@ class BaseModel(object):
         if self.time_major:
           target_input = tf.transpose(target_input)
         decoder_emb_inp = tf.nn.embedding_lookup(
-            self.embedding_decoder, target_input)
+            self.tgt_embedding, target_input)
 
         # Helper
         helper = tf.contrib.seq2seq.TrainingHelper(
@@ -452,7 +456,7 @@ class BaseModel(object):
         if beam_width > 0:
           my_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
               cell=cell,
-              embedding=self.embedding_decoder,
+              embedding=self.tgt_embedding,
               start_tokens=start_tokens,
               end_token=end_token,
               initial_state=decoder_initial_state,
@@ -464,12 +468,12 @@ class BaseModel(object):
           sampling_temperature = hparams.sampling_temperature
           if sampling_temperature > 0.0:
             helper = tf.contrib.seq2seq.SampleEmbeddingHelper(
-                self.embedding_decoder, start_tokens, end_token,
+                self.tgt_embedding, start_tokens, end_token,
                 softmax_temperature=sampling_temperature,
                 seed=hparams.random_seed)
           else:
             helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
-                self.embedding_decoder, start_tokens, end_token)
+                self.tgt_embedding, start_tokens, end_token)
 
           # Decoder
           my_decoder = tf.contrib.seq2seq.BasicDecoder(
@@ -622,7 +626,7 @@ class Model(BaseModel):
       dtype = scope.dtype
       # Look up embedding, emp_inp: [max_time, batch_size, num_units]
       encoder_emb_inp = tf.nn.embedding_lookup(
-          self.embedding_encoder, source)
+          self.src_embedding, source)
 
       # Encoder_outputs: [max_time, batch_size, num_units]
       if hparams.encoder_type == "uni":

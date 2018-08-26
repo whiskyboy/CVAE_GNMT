@@ -79,7 +79,7 @@ class GNMTModel(attention_model.AttentionModel):
 
       # Look up embedding, emp_inp: [max_time, batch_size, num_units]
       #   when time_major = True
-      encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
+      encoder_emb_inp = tf.nn.embedding_lookup(self.src_embedding,
                                                source)
 
       # Execute _build_bidirectional_rnn from Model class
