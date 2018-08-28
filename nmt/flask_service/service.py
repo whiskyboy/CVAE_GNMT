@@ -12,8 +12,6 @@ def add_arguments(parser):
                         help="path of cvae model")
     parser.add_argument("--lm_model_dir", type=str, required=True,
                         help="path of language model")
-    parser.add_argument("--sample_num", type=int, default=80,
-                        help="sample number for generation")
     parser.add_argument("--src_vocab_file", type=str, default=None,
                         help="path of source(title) vocabulary file")
     parser.add_argument("--tgt_vocab_file", type=str, default=None,
@@ -58,6 +56,7 @@ def GetComment():
     if req_json is None or "Query" not in req_json:
         return jsonify({"Error": "Bad Request"}), 403
     query = preprocess_text(req_json["Query"])
+    sample_num = req_json.get("SampleNum", 30)
     ppl_cutoff_score = req_json.get("PPLCutoffScore", -3.0)
     lm_cutoff_score = req_json.get("LMCutoffScore", -5.0)
     pmi_cutoff_score = req_json.get("PMICutoffScore", 1.0)
@@ -65,7 +64,7 @@ def GetComment():
     min_response_len = req_json.get("MinResponseLen", 3)
     max_response_len = req_json.get("MaxResponseLen", 20)
     
-    responses = comment_server.comment(query)
+    responses = comment_server.comment(query, sample_num)
     valid_responses = []
     for comment, (ppl, lm_prob, lm_prob_details, pmi) in responses:
         if len(comment.split(" ")) < min_response_len or \
@@ -111,7 +110,6 @@ if __name__ == "__main__":
 
     comment_server = AlphaCommentServer(cvae_model_dir=FLAGS.cvae_model_dir,
                                         lm_model_dir=FLAGS.lm_model_dir,
-                                        sample_num=FLAGS.sample_num,
                                         src_vocab_file=FLAGS.src_vocab_file,
                                         tgt_vocab_file=FLAGS.tgt_vocab_file)
 

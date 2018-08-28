@@ -20,14 +20,13 @@ utils.check_tensorflow_version()
 PMI_LAMBDA = 1.0
 
 class AlphaCommentServer(object):
-    def __init__(self, cvae_model_dir, lm_model_dir, sample_num=80, src_vocab_file=None, tgt_vocab_file=None, args=None):
+    def __init__(self, cvae_model_dir, lm_model_dir, src_vocab_file=None, tgt_vocab_file=None, args=None):
         nmt_parser = argparse.ArgumentParser()
         nmt.add_arguments(nmt_parser)
         FLAGS, _ = nmt_parser.parse_known_args(args)
         default_hparams = nmt.create_hparams(FLAGS)
         self.hparams = nmt.create_or_load_hparams(cvae_model_dir, default_hparams, FLAGS.hparams_path, save_hparams=False)
-        self.hparams.sample_num = sample_num # for inference
-        self.hparams.beam_width = 0 # force use greedy decoder for inference
+        #self.hparams.beam_width = 0 # force use greedy decoder for inference
         if src_vocab_file:
             self.hparams.src_vocab_file = src_vocab_file
         else:
@@ -55,13 +54,13 @@ class AlphaCommentServer(object):
         return " ".join(refined_tokens)
 
 
-    def comment(self, title):
-        infer_data = [title]
+    def comment(self, title, sample_num=30):
+        infer_data = [title] * sample_num
         self.sess.run(
             self.infer_model.iterator.initializer,
             feed_dict={
                 self.infer_model.src_placeholder: infer_data,
-                self.infer_model.batch_size_placeholder: 1,
+                self.infer_model.batch_size_placeholder: sample_num,
             })
 
         # Decode
@@ -77,8 +76,8 @@ class AlphaCommentServer(object):
                     nmt_outputs = nmt_outputs[0]
                     nmt_logp = nmt_logp[0]
 
-                _sample_num = nmt_outputs.shape[0]
-                for sent_id in range(_sample_num):
+                batch_size = nmt_outputs.shape[0]
+                for sent_id in range(batch_size):
                     translation, ppl = nmt_utils.get_translation_with_ppl(
                         nmt_outputs,
                         nmt_logp,

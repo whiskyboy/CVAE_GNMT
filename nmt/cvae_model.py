@@ -83,15 +83,6 @@ class CVAEModel(gnmt_model.GNMTModel):
                                                                           num_uni_layers, num_bi_layers,
                                                                           hparams, scope)
       
-      if self.mode == tf.contrib.learn.ModeKeys.INFER:
-        # copy to multiple samples
-        if self.time_major:
-          src_encoder_outputs = tf.transpose(src_encoder_outputs, [1, 0, 2])
-          src_encoder_outputs = tf.contrib.seq2seq.tile_batch(src_encoder_outputs, multiplier=self.sample_num)
-          src_encoder_outputs = tf.transpose(src_encoder_outputs, [1, 0, 2])
-        else:
-          src_encoder_outputs = tf.contrib.seq2seq.tile_batch(src_encoder_outputs, multiplier=self.sample_num)
-      
       encoder_outputs = src_encoder_outputs
 
     with tf.variable_scope("tgt_encoder") as scope:
@@ -145,10 +136,6 @@ class CVAEModel(gnmt_model.GNMTModel):
 
   def _get_decoder_init_state(self, src_state, tgt_state, scope_idx, hparams):
     with tf.variable_scope("priorNetwork_%s" % scope_idx) as scope:
-      if self.mode == tf.contrib.learn.ModeKeys.INFER:
-        # copy to multiple samples
-        src_state = tf.contrib.seq2seq.tile_batch(src_state, multiplier=self.sample_num)
-      
       prior_mulogvar = tf.contrib.layers.fully_connected(src_state, self.cvae_latent_size * 2)
       #prior_fc = tf.contrib.layers.fully_connected(src_state, 100, activation_fn=tf.tanh)
       #prior_mulogvar = tf.contrib.layers.fully_connected(prior_fc, self.cvae_latent_size * 2)

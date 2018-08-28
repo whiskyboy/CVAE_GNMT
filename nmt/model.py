@@ -100,9 +100,6 @@ class BaseModel(object):
     self.init_embeddings(hparams, scope)
     self.batch_size = tf.size(self.iterator.source_sequence_length)
 
-    # sample_num for cvae
-    self.sample_num = hparams.sample_num
-
     # Projection
     with tf.variable_scope(scope or "build_network"):
       with tf.variable_scope("decoder/output_projection"):
@@ -394,22 +391,16 @@ class BaseModel(object):
     tgt_eos_id = tf.cast(self.tgt_vocab_table.lookup(tf.constant(hparams.eos)),
                          tf.int32)
     iterator = self.iterator
-    source_sequence_length = iterator.source_sequence_length
-    
-    if self.mode == tf.contrib.learn.ModeKeys.INFER:
-      source_sequence_length = tf.contrib.seq2seq.tile_batch(
-          source_sequence_length, multiplier=self.sample_num)
-      self.batch_size = tf.size(source_sequence_length)
 
     # maximum_iteration: The maximum decoding steps.
     maximum_iterations = self._get_infer_maximum_iterations(
-        hparams, source_sequence_length)
+        hparams, iterator.source_sequence_length)
 
     ## Decoder.
     with tf.variable_scope("decoder") as decoder_scope:
       cell, decoder_initial_state = self._build_decoder_cell(
           hparams, encoder_outputs, encoder_state,
-          source_sequence_length)
+          iterator.source_sequence_length)
 
       ## Train or eval
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
