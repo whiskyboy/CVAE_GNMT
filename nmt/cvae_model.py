@@ -88,7 +88,7 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     with tf.variable_scope("ctx_encoder") as scope:
       context = iterator.context
-      # ctx_encoder_state = self._get_bow_encoder(context, hparams, scope)
+      # ctx_encoder_state = self._get_bow_encoder(context, self.ctx_embedding, hparams, scope)
       ctx_encoder_state = self._get_cnn_encoder(context, self.ctx_embedding, hparams, scope)
 
     with tf.variable_scope("tgt_encoder") as scope:
@@ -255,8 +255,13 @@ class CVAEModel(gnmt_model.GNMTModel):
 
     return encoder_outputs, encoder_state
 
-  def _get_bow_encoder(self, context, hparams, scope):
-    bow_encoder_state = tf.contrib.layers.bow_encoder(context, vocab_size=self.ctx_vocab_size, embed_dim=hparams.num_units)
+  def _get_bow_encoder(self, context, embedding_table, hparams, scope):
+    encoder_emb_inp = tf.nn.embedding_lookup(embedding_table,
+                                             context)
+    bow_encoder_state = tf.reduce_max(encoder_emb_inp, reduction_indices=[1])
+    # bow_encoder_state = tf.contrib.layers.bow_encoder(context,
+    #                                                   vocab_size=self.ctx_vocab_size,
+    #                                                   embed_dim=hparams.num_units)
     bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
     bow_encoder_state = tf.contrib.layers.fully_connected(bow_encoder_state, hparams.num_units)
     return bow_encoder_state
