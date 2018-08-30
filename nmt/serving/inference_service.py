@@ -20,13 +20,13 @@ utils.check_tensorflow_version()
 PMI_LAMBDA = 1.0
 
 class AlphaCommentServer(object):
-    def __init__(self, cvae_model_dir, lm_model_dir, src_vocab_file=None, tgt_vocab_file=None, args=None):
+    def __init__(self, cvae_model_dir, lm_model_dir, beam_width=10, src_vocab_file=None, tgt_vocab_file=None, args=None):
         nmt_parser = argparse.ArgumentParser()
         nmt.add_arguments(nmt_parser)
         FLAGS, _ = nmt_parser.parse_known_args(args)
         default_hparams = nmt.create_hparams(FLAGS)
         self.hparams = nmt.create_or_load_hparams(cvae_model_dir, default_hparams, FLAGS.hparams_path, save_hparams=False)
-        #self.hparams.beam_width = 0 # force use greedy decoder for inference
+        self.hparams.beam_width = beam_width
         if src_vocab_file:
             self.hparams.src_vocab_file = src_vocab_file
         else:
@@ -70,7 +70,7 @@ class AlphaCommentServer(object):
         comments = {}
         while True:
             try:
-                nmt_outputs, nmt_logp = self.loaded_infer_model.decode_with_logp(self.sess)
+                nmt_outputs, nmt_logp = self.loaded_infer_model.decode_with_logp(self.hparams, self.sess)
                 
                 if self.hparams.beam_width > 0:
                     nmt_outputs = nmt_outputs[0]
@@ -83,7 +83,8 @@ class AlphaCommentServer(object):
                         nmt_logp,
                         sent_id,
                         tgt_eos=self.hparams.eos,
-                        subword_option=self.hparams.subword_option)
+                        subword_option=self.hparams.subword_option,
+                        hparams=self.hparams)
                     refined_trans = self.refine(translation)
                     if refined_trans:
                         lm_prob, lm_prob_details = self.lm_model.log_probability_sentence(refined_trans)

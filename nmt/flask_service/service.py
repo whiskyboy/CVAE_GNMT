@@ -12,6 +12,8 @@ def add_arguments(parser):
                         help="path of cvae model")
     parser.add_argument("--lm_model_dir", type=str, required=True,
                         help="path of language model")
+    parser.add_argument("--beam_width", type=int, default=10,
+                        help="beam width, default is 10")
     parser.add_argument("--src_vocab_file", type=str, default=None,
                         help="path of source(title) vocabulary file")
     parser.add_argument("--tgt_vocab_file", type=str, default=None,
@@ -110,6 +112,7 @@ if __name__ == "__main__":
 
     comment_server = AlphaCommentServer(cvae_model_dir=FLAGS.cvae_model_dir,
                                         lm_model_dir=FLAGS.lm_model_dir,
+                                        beam_width=FLAGS.beam_width,
                                         src_vocab_file=FLAGS.src_vocab_file,
                                         tgt_vocab_file=FLAGS.tgt_vocab_file)
 

@@ -109,7 +109,7 @@ def get_translation(nmt_outputs, sent_id, tgt_eos, subword_option):
   return translation
 
 
-def get_translation_with_ppl(nmt_outputs, nmt_logp, sent_id, tgt_eos, subword_option):
+def get_translation_with_ppl(nmt_outputs, nmt_logp, sent_id, tgt_eos, subword_option, hparams):
   """Given batch decoding outputs, select a sentence and turn to text."""
   if tgt_eos: tgt_eos = tgt_eos.encode("utf-8")
   # Select a sentence
@@ -129,6 +129,9 @@ def get_translation_with_ppl(nmt_outputs, nmt_logp, sent_id, tgt_eos, subword_op
   else:
     translation = utils.format_text(output)
 
-  ppl = float(np.mean(logp))
+  if hparams.beam_width > 0:
+    ppl = float(logp[-1]/len(logp))
+  else:
+    ppl = float(np.mean(logp))
 
   return translation, ppl

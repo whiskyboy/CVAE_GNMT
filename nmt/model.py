@@ -485,7 +485,7 @@ class BaseModel(object):
             scope=decoder_scope)
 
         if beam_width > 0:
-          logits = tf.no_op()
+          logits = outputs.beam_search_decoder_output.scores
           sample_id = outputs.predicted_ids
         else:
           logits = outputs.rnn_output
@@ -573,7 +573,7 @@ class BaseModel(object):
     logits_idx = tuple(np.indices(sample_id.shape)) + (sample_id.astype("int"), )
     return np.log(softmax_logits[logits_idx])
 
-  def decode_with_logp(self, sess):
+  def decode_with_logp(self, hparams, sess):
     """Decode a batch.
 
     Args:
@@ -584,7 +584,10 @@ class BaseModel(object):
         outputs: of size [batch_size, time]
     """
     infer_logits, _, sample_id, sample_words = self.infer(sess)
-    infer_logp = self._get_log_probability_with_sample_id(infer_logits, sample_id)
+    if hparams.beam_width > 0:
+      infer_logp = infer_logits
+    else:
+      infer_logp = self._get_log_probability_with_sample_id(infer_logits, sample_id)
 
     # make sure outputs is of shape [batch_size, time] or [beam_width,
     # batch_size, time] when using beam search.
