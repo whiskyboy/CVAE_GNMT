@@ -71,52 +71,84 @@ class GNMTModel(attention_model.AttentionModel):
 
     iterator = self.iterator
     source = iterator.source
+    context = iterator.context
     if self.time_major:
       source = tf.transpose(source)
+      context = tf.transpose(context)
 
-    with tf.variable_scope("encoder") as scope:
-      dtype = scope.dtype
+    with tf.variable_scope("src_encoder") as scope:
+      src_encoder_outputs, src_encoder_state = self._get_sequence_encoder(source, iterator.source_sequence_length,
+                                                                          self.src_embedding,
+                                                                          num_uni_layers, num_bi_layers,
+                                                                          hparams, scope)
 
-      # Look up embedding, emp_inp: [max_time, batch_size, num_units]
-      #   when time_major = True
-      encoder_emb_inp = tf.nn.embedding_lookup(self.src_embedding,
-                                               source)
+    with tf.variable_scope("ctx_encoder") as scope:
+      ctx_encoder_outputs, ctx_encoder_state = self._get_sequence_encoder(context, iterator.context_sequence_length,
+                                                                          self.ctx_embedding,
+                                                                          num_uni_layers, num_bi_layers,
+                                                                          hparams, scope)
 
-      # Execute _build_bidirectional_rnn from Model class
-      bi_encoder_outputs, bi_encoder_state = self._build_bidirectional_rnn(
-          inputs=encoder_emb_inp,
-          sequence_length=iterator.source_sequence_length,
-          dtype=dtype,
-          hparams=hparams,
-          num_bi_layers=num_bi_layers,
-          num_bi_residual_layers=0,  # no residual connection
-      )
+    _num_encoder_layers = len(src_encoder_state)
+    self.decoder_init_state = []
+    for i in range(_num_encoder_layers):
+      _layer_init_state = []
+      _num_rnn_layers = len(src_encoder_state[i])
+      for j in range(_num_rnn_layers):
+        _src_state = src_encoder_state[i][j]
+        _ctx_state = ctx_encoder_state[i][j]
+        with tf.variable_scope("concatNetwork_%s_%s"%(i,j)) as scope:
+          _concat_state = tf.concat([_src_state, _ctx_state], -1)
+          _init_state = tf.contrib.layers.fully_connected(_concat_state, hparams.num_units)
+          _layer_init_state.append(_init_state)
+      self.decoder_init_state.append(tf.contrib.rnn.LSTMStateTuple(*_layer_init_state))
+    self.decoder_init_state = tuple(self.decoder_init_state)
 
-      uni_cell = model_helper.create_rnn_cell(
-          unit_type=hparams.unit_type,
-          num_units=hparams.num_units,
-          num_layers=num_uni_layers,
-          num_residual_layers=self.num_encoder_residual_layers,
-          forget_bias=hparams.forget_bias,
-          dropout=hparams.dropout,
-          num_gpus=self.num_gpus,
-          base_gpu=1,
-          mode=self.mode,
-          single_cell_fn=self.single_cell_fn)
+    return ctx_encoder_outputs, self.decoder_init_state
 
-      # encoder_outputs: size [max_time, batch_size, num_units]
-      #   when time_major = True
-      encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
-          uni_cell,
-          bi_encoder_outputs,
-          dtype=dtype,
-          sequence_length=iterator.source_sequence_length,
-          time_major=self.time_major)
+  def _get_sequence_encoder(self, sequence, sequence_length, embedding_table,
+                            num_uni_layers, num_bi_layers, hparams, scope):
+    dtype = scope.dtype
 
-      # Pass all encoder state except the first bi-directional layer's state to
-      # decoder.
-      encoder_state = (bi_encoder_state[1],) + (
-          (encoder_state,) if num_uni_layers == 1 else encoder_state)
+    # Look up embedding, emp_inp: [max_time, batch_size, num_units]
+    #   when time_major = True
+    encoder_emb_inp = tf.nn.embedding_lookup(embedding_table,
+                                             sequence)
+
+    # Execute _build_bidirectional_rnn from Model class
+    bi_encoder_outputs, bi_encoder_state = self._build_bidirectional_rnn(
+        inputs=encoder_emb_inp,
+        sequence_length=sequence_length,
+        dtype=dtype,
+        hparams=hparams,
+        num_bi_layers=num_bi_layers,
+        num_bi_residual_layers=0,  # no residual connection
+    )
+
+    uni_cell = model_helper.create_rnn_cell(
+        unit_type=hparams.unit_type,
+        num_units=hparams.num_units,
+        num_layers=num_uni_layers,
+        num_residual_layers=self.num_encoder_residual_layers,
+        forget_bias=hparams.forget_bias,
+        dropout=hparams.dropout,
+        num_gpus=self.num_gpus,
+        base_gpu=1,
+        mode=self.mode,
+        single_cell_fn=self.single_cell_fn)
+
+    # encoder_outputs: size [max_time, batch_size, num_units]
+    #   when time_major = True
+    encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
+        uni_cell,
+        bi_encoder_outputs,
+        dtype=dtype,
+        sequence_length=sequence_length,
+        time_major=self.time_major)
+
+    # Pass all encoder state except the first bi-directional layer's state to
+    # decoder.
+    encoder_state = (bi_encoder_state[1],) + (
+        (encoder_state,) if num_uni_layers == 1 else encoder_state)
 
     return encoder_outputs, encoder_state
 
